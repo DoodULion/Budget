@@ -11,6 +11,19 @@ npm test                # calculation, input and backup tests
 npm run build           # type-check and build into dist/
 ```
 
+## Deploying
+
+Pushing to `main` builds, tests and publishes the site with GitHub Actions (`.github/workflows/deploy.yml`). One-time setup: in the repository, **Settings > Pages > Source: GitHub Actions**. The site is served at `https://<username>.github.io/<repository-name>/` (the build picks up the repository name automatically). Open it in Safari on the iPhone, then Share > Add to Home Screen.
+
+To test the production build locally under the same path:
+
+```powershell
+$env:VITE_BASE = '/Budget/'
+npm run build
+npx vite preview --port 4173
+# open http://localhost:4173/Budget/
+```
+
 ## Code map
 
 - `src/calc.ts`: all budget math (months, bills, categories, saved, year figures), pure and tested in `src/calc.test.ts`.
