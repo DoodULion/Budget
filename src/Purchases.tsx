@@ -99,10 +99,9 @@ export default function Purchases({ store, month, today }: { store: Store; month
                       <span className="row-main">
                         <strong>{p.description || c?.name || 'Deleted category'}</strong>
                         <span className="row-sub">
-                          {/* a no-break space keeps each "·" at the end of a line when the line wraps */}
-                          {(p.description || p.paidWith) && (
-                            <span>{[p.description ? (c?.name ?? 'Deleted category') : '', p.paidWith ?? ''].filter(Boolean).join('\u00a0· ')}</span>
-                          )}
+                          {/* each name stays on one line; when the line wraps, the "·" stays at the end of the first line */}
+                          {p.description && <span className="nw">{c?.name ?? 'Deleted category'}{p.paidWith ? '\u00a0·' : ''}</span>}
+                          {p.paidWith && <span className="nw">{p.paidWith}</span>}
                           {p.note && <span className="row-note">{p.description || p.paidWith ? '· ' : ''}{p.note}</span>}
                         </span>
                       </span>
