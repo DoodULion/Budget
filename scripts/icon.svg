@@ -1,0 +1,11 @@
+<!--
+  Budget Tracker icon (placeholder until the theme is settled in step 3).
+  PNGs in public/icons/ are rendered from this file with scripts/render-icons.mjs.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#1f3a5f"/>
+  <!-- three bars rising, the last one teal -->
+  <rect x="120" y="268" width="72" height="124" rx="18" fill="#eef1f5" opacity="0.55"/>
+  <rect x="220" y="208" width="72" height="184" rx="18" fill="#eef1f5" opacity="0.8"/>
+  <rect x="320" y="128" width="72" height="264" rx="18" fill="#3cc4cc"/>
+</svg>
