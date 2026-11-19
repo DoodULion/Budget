@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Month, Purchase } from './calc';
 import { autopayMonths, type Data } from './calc';
-import { cardMonths, cardSummary, debtBill, debtBillChanges, interestSaved, isPaidOff, minimumFor, paidOffIds, debtLabel, formatApr, isLoan, linkedBills, parseApr, payoff, payoffForMonth, projection, totalSeries, type CreditCard } from './cards';
+import { cardMonths, cardSummary, debtBill, debtBillChanges, groupDebtBills, interestSaved, isPaidOff, minimumFor, paidOffIds, debtLabel, formatApr, isLoan, linkedBills, parseApr, payoff, payoffForMonth, projection, totalSeries, type CreditCard } from './cards';
 
 // Made-up figures only.
 const card: CreditCard = {
@@ -341,5 +341,31 @@ describe('due date', () => {
     const s = cardSummary({ ...loan, startMonth: '2027-01' }, [], '2027-02-15', linked);
     expect(s.balanceNowCents).toBeLessThan(1_000_000 - 60_000 + 10_000); // two payments off, a little interest on
     expect(s.balanceNowCents).toBeGreaterThan(1_000_000 - 60_000);
+  });
+});
+
+describe('combining debt bills of the same type', () => {
+  const debt = (id: string, kind?: CreditCard['kind']): CreditCard => ({ id, kind, name: id, aprBps: 0, startBalanceCents: 0, startMonth: '2027-01', payments: [] });
+  const row = (id: string, cardId: string | undefined, status: 'paid' | 'unpaid' | 'ended', amount = 10_000, counted = status === 'paid' ? amount : 0) => ({
+    bill: { id, name: id, amountCents: amount, cardId },
+    amountCents: amount,
+    status,
+    countedCents: counted,
+  });
+  const debts = [debt('a'), debt('b'), debt('c', 'auto-loan'), debt('d', 'student-loan'), debt('e')];
+
+  it('groups bills that pay the same type of debt, where the first one was', () => {
+    const rows = [row('rent', undefined, 'paid'), row('pa', 'a', 'paid', 5_000, 5_500), row('car', 'c', 'unpaid'), row('pb', 'b', 'unpaid', 2_000), row('pe', 'e', 'ended')];
+    const items = groupDebtBills(rows, debts);
+    expect(items.map((i) => (i.kind === 'bill' ? i.row.bill.id : `group:${i.id}`))).toEqual(['rent', 'group:credit-card', 'car']);
+    const g = items[1];
+    if (g.kind !== 'group') throw new Error('expected a group');
+    expect(g.label).toBe('Credit cards');
+    expect(g.rows.map((r) => r.bill.id)).toEqual(['pa', 'pb', 'pe']);
+    expect([g.paid, g.amountCents]).toEqual([1, 5_500 + 2_000]); // the paid one counts what was paid, the unpaid its amount, the ended none
+  });
+  it('leaves a lone debt bill, and bills that pay nothing, as plain rows', () => {
+    const items = groupDebtBills([row('pa', 'a', 'paid'), row('car', 'c', 'paid'), row('x', 'gone', 'unpaid')], debts);
+    expect(items.every((i) => i.kind === 'bill')).toBe(true);
   });
 });

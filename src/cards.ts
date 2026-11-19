@@ -12,7 +12,7 @@
  * The month in progress has no interest yet; it shows what would be added if the statement stays unpaid.
  */
 import { todayLocal } from './money';
-import { billRows, addMonths, type Bill, monthOf, monthRange, roundDiv, type Cents, type Data, type DateKey, type MonthKey, type Purchase } from './calc';
+import { type BillRow, billRows, addMonths, type Bill, monthOf, monthRange, roundDiv, type Cents, type Data, type DateKey, type MonthKey, type Purchase } from './calc';
 
 export interface CardPayment {
   id: string;
@@ -363,6 +363,43 @@ export function debtBillChanges(data: Data, today: DateKey): { put: Bill[]; remo
     }
   }
   return { put, remove };
+}
+
+export type BillItem = { kind: 'bill'; row: BillRow } | { kind: 'group'; id: DebtKind; label: string; rows: BillRow[]; paid: number; amountCents: Cents };
+
+/**
+ * The month's bills with those that pay debts of the same type (credit cards, auto loans …) combined into one group.
+ * A type with a single bill stays a plain row. A group sits where its first bill was.
+ */
+export function groupDebtBills(rows: BillRow[], debts: CreditCard[]): BillItem[] {
+  const kindOf = (r: BillRow): DebtKind | undefined => {
+    const d = r.bill.cardId ? debts.find((c) => c.id === r.bill.cardId) : undefined;
+    return d ? (d.kind ?? 'credit-card') : undefined;
+  };
+  const counts = new Map<DebtKind, number>();
+  for (const r of rows) {
+    const k = kindOf(r);
+    if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  const items: BillItem[] = [];
+  const groups = new Map<DebtKind, Extract<BillItem, { kind: 'group' }>>();
+  for (const r of rows) {
+    const k = kindOf(r);
+    if (!k || (counts.get(k) ?? 0) < 2) {
+      items.push({ kind: 'bill', row: r });
+      continue;
+    }
+    let g = groups.get(k);
+    if (!g) {
+      g = { kind: 'group', id: k, label: `${debtLabel({ kind: k })}s`, rows: [], paid: 0, amountCents: 0 };
+      groups.set(k, g);
+      items.push(g);
+    }
+    g.rows.push(r);
+    if (r.status === 'paid') g.paid += 1;
+    if (r.status !== 'ended') g.amountCents += r.status === 'paid' ? r.countedCents : r.bill.amountCents;
+  }
+  return items;
 }
 
 /** The id of the fixed bill that carries a debt's minimum payment. */
