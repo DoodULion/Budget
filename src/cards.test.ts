@@ -416,3 +416,32 @@ describe('resetting balances', () => {
     expect(isPaidOff(resetDebt(card, 0, '2027-03-10'), cardSummary(resetDebt(card, 0, '2027-03-10'), [], today))).toBe(false);
   });
 });
+
+describe('resetting a closed card with a due date', () => {
+  // Made-up: a closed card with a $50.00 minimum due on the 15th, autopaid since 2027-01.
+  const closed: CreditCard = { id: 'old', name: 'Old Card', aprBps: 2400, startBalanceCents: 100_000, startMonth: '2027-01', closedMonth: '2027-01', minPaymentCents: 5_000, dueDay: 15, payments: [] };
+  const bill = debtBill(closed, undefined, '2027-01-02')!;
+  const data = (card: CreditCard): Data => ({ settings: { firstMonth: '2027-01' } as Data['settings'], bills: [bill], cards: [card], categories: [], months: [], purchases: [] });
+  const marchRow = (card: CreditCard, today: string) => {
+    const months = autopayMonths(data(card), today);
+    const linked = linkedBills(card, { bills: [bill], months }, today);
+    return cardSummary(card, [], today, linked).rows.at(-1)!;
+  };
+  it("doesn't count the month's payment again when the reset is after the due day", () => {
+    const reset = resetDebt(closed, 80_000, '2027-03-20');
+    expect(marchRow(reset, '2027-03-25')).toMatchObject({ month: '2027-03', openingCents: 80_000, paymentsCents: 0, closingCents: 80_000 });
+  });
+  it('counts it when the reset is before the due day', () => {
+    const reset = resetDebt(closed, 80_000, '2027-03-10');
+    expect(marchRow(reset, '2027-03-14')).toMatchObject({ paymentsCents: 0, closingCents: 80_000 }); // not due yet
+    expect(marchRow(reset, '2027-03-25')).toMatchObject({ openingCents: 80_000, paymentsCents: 5_000, closingCents: 75_000 });
+  });
+  it('treats a reset on the due day itself as already including that payment', () => {
+    expect(marchRow(resetDebt(closed, 80_000, '2027-03-15'), '2027-03-25')).toMatchObject({ paymentsCents: 0, closingCents: 80_000 });
+  });
+  it('keeps counting the next months as usual', () => {
+    const reset = resetDebt(closed, 80_000, '2027-03-20');
+    const s = cardSummary(reset, [], '2027-04-20', linkedBills(reset, { bills: [bill], months: autopayMonths(data(reset), '2027-04-20') }, '2027-04-20'));
+    expect(s.rows.map((r) => [r.month, r.paymentsCents])).toEqual([['2027-03', 0], ['2027-04', 5_000]]);
+  });
+});
