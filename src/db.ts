@@ -3,20 +3,22 @@
  * One record per bill, category, month and purchase; the settings live under `meta`.
  */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
+import type { CreditCard } from './cards';
 import { emptySettings, monthOf, type Bill, type Category, type Data, type Month, type Purchase, type Settings } from './calc';
 import { todayLocal } from './money';
 
 interface Schema extends DBSchema {
   meta: { key: string; value: unknown };
   bills: { key: string; value: Bill };
+  cards: { key: string; value: CreditCard };
   categories: { key: string; value: Category };
   months: { key: string; value: Month };
   purchases: { key: string; value: Purchase; indexes: { date: string } };
 }
 
 const DB_NAME = 'budget-tracker';
-const DB_VERSION = 1;
-const STORES = ['meta', 'bills', 'categories', 'months', 'purchases'] as const;
+const DB_VERSION = 2;
+const STORES = ['meta', 'bills', 'cards', 'categories', 'months', 'purchases'] as const;
 
 let dbPromise: Promise<IDBPDatabase<Schema>> | undefined;
 
@@ -30,6 +32,7 @@ function db() {
         d.createObjectStore('months', { keyPath: 'month' });
         d.createObjectStore('purchases', { keyPath: 'id' }).createIndex('date', 'date');
       }
+      if (oldVersion < 2) d.createObjectStore('cards', { keyPath: 'id' });
     },
   });
   return dbPromise;
@@ -50,15 +53,16 @@ export async function requestPersistence(): Promise<void> {
 export async function loadData(): Promise<Data> {
   const d = await db();
   const tx = d.transaction(STORES, 'readonly');
-  const [settings, bills, categories, months, purchases] = await Promise.all([
+  const [settings, bills, cards, categories, months, purchases] = await Promise.all([
     tx.objectStore('meta').get('settings') as Promise<Settings | undefined>,
     tx.objectStore('bills').getAll(),
+    tx.objectStore('cards').getAll(),
     tx.objectStore('categories').getAll(),
     tx.objectStore('months').getAll(),
     tx.objectStore('purchases').getAll(),
   ]);
   await tx.done;
-  return { settings: settings ?? emptySettings(monthOf(todayLocal())), bills, categories, months, purchases };
+  return { settings: settings ?? emptySettings(monthOf(todayLocal())), bills, cards, categories, months, purchases };
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {
@@ -71,6 +75,14 @@ export async function putBill(bill: Bill): Promise<void> {
 
 export async function deleteBill(id: string): Promise<void> {
   await (await db()).delete('bills', id);
+}
+
+export async function putCard(card: CreditCard): Promise<void> {
+  await (await db()).put('cards', card);
+}
+
+export async function deleteCard(id: string): Promise<void> {
+  await (await db()).delete('cards', id);
 }
 
 export async function putCategory(category: Category): Promise<void> {
@@ -101,6 +113,7 @@ export async function replaceAll(data: Data): Promise<void> {
   await Promise.all([
     tx.objectStore('meta').put(data.settings, 'settings'),
     ...data.bills.map((b) => tx.objectStore('bills').put(b)),
+    ...data.cards.map((c) => tx.objectStore('cards').put(c)),
     ...data.categories.map((c) => tx.objectStore('categories').put(c)),
     ...data.months.map((m) => tx.objectStore('months').put(m)),
     ...data.purchases.map((p) => tx.objectStore('purchases').put(p)),

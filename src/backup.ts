@@ -2,6 +2,7 @@
  * JSON backup (everything) and CSV export (purchases). Pure functions; saving the file is in download.ts.
  * Backups hold personal figures: they are exported to the phone, never committed to the repo.
  */
+import type { CreditCard } from './cards';
 import { formatCents, monthOf, type Bill, type Category, type Data, type Month, type Purchase, type Settings } from './calc';
 
 export const BACKUP_APP = 'budget-tracker';
@@ -71,6 +72,22 @@ export function parseBackup(text: string): Data {
       d.bills,
       'bills',
       (b) => isStr(b.id) && isStr(b.name) && isInt(b.amountCents) && (b.lastMonth === undefined || isMonth(b.lastMonth)) && optStr(b.note),
+    ),
+    // Backups made before the Cards tab have no cards.
+    cards: d.cards === undefined ? [] : checkList<CreditCard>(
+      d.cards,
+      'cards',
+      (c) =>
+        isStr(c.id) &&
+        isStr(c.name) &&
+        isInt(c.aprBps) &&
+        isInt(c.startBalanceCents) &&
+        isMonth(c.startMonth) &&
+        optInt(c.limitCents) &&
+        optInt(c.plannedPaymentCents) &&
+        (c.payInFull === undefined || typeof c.payInFull === 'boolean') &&
+        Array.isArray(c.payments) &&
+        c.payments.every((p) => isObj(p) && isStr(p.id) && isDate(p.date) && isInt(p.amountCents)),
     ),
     categories: checkList<Category>(
       d.categories,

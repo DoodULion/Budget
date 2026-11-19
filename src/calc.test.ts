@@ -29,6 +29,7 @@ function data(): Data {
       paidWith: ['Card A', 'Card B'],
       setupDone: true,
     },
+    cards: [],
     bills: [
       { id: 'rent', name: 'Rent', amountCents: 120_000 },
       { id: 'phone', name: 'Phone', amountCents: 5_000 },

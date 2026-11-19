@@ -13,6 +13,7 @@ function data(): Data {
       paidWith: ['Card A'],
       setupDone: true,
     },
+    cards: [],
     bills: [{ id: 'rent', name: 'Rent', amountCents: 120_000, lastMonth: '2027-06' }],
     categories: [
       { id: 'food', name: 'Food', budgetCents: 40_000, color: '#000' },
@@ -30,6 +31,25 @@ describe('JSON backup', () => {
   it('round-trips everything', () => {
     const d = data();
     expect(parseBackup(toBackup(d))).toEqual(d);
+  });
+
+  it('round-trips credit cards and payments', () => {
+    const d = data();
+    d.cards = [
+      { id: 'v', name: 'Card A', aprBps: 2499, startBalanceCents: 100_000, startMonth: '2027-01', limitCents: 500_000, plannedPaymentCents: 5_000, payments: [{ id: 'p', date: '2027-02-01', amountCents: 2_500 }] },
+    ];
+    expect(parseBackup(toBackup(d))).toEqual(d);
+  });
+
+  it('reads a backup made before the Cards tab (no cards)', () => {
+    const { cards: _cards, ...old } = data();
+    expect(parseBackup(JSON.stringify({ app: 'budget-tracker', version: 1, data: old })).cards).toEqual([]);
+  });
+
+  it('rejects damaged cards', () => {
+    const d = data() as unknown as { cards: unknown[] };
+    d.cards = [{ id: 'v', name: 'Card A', aprBps: 24.99, startBalanceCents: 0, startMonth: '2027-01', payments: [] }];
+    expect(() => parseBackup(JSON.stringify({ app: 'budget-tracker', version: 1, data: d }))).toThrow(/cards/);
   });
 
   it('rejects files that are not a backup', () => {

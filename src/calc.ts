@@ -6,6 +6,8 @@
  * compared as strings, never through time zones.
  */
 
+import type { CreditCard } from './cards';
+
 export type Cents = number;
 /** `YYYY-MM` */
 export type MonthKey = string;
@@ -45,6 +47,8 @@ export interface Category {
   color: string;
   /** No longer offered; stays on past purchases and in their totals. */
   deleted?: boolean;
+  /** Left off the Add tab's category tiles (chosen under Setup). Still budgeted and shown on Summary. */
+  hidden?: boolean;
 }
 
 export interface BillPayment {
@@ -73,6 +77,8 @@ export interface Purchase {
 export interface Data {
   settings: Settings;
   bills: Bill[];
+  /** Credit cards; each is linked to a Paid with name (see cards.ts). */
+  cards: CreditCard[];
   categories: Category[];
   months: Month[];
   purchases: Purchase[];
