@@ -2,7 +2,7 @@ import { Fragment, useState, type JSX } from 'react';
 import { useCardOrder } from './useCardOrder';
 import { useHoldDrag } from './useHoldDrag';
 import { payoffForMonth, PAYOFF_NAME } from './cards';
-import { formatCents, monthLabel, monthSummary, roundDiv, type BillRow, type MonthKey } from './calc';
+import { autopayDate, formatCents, monthLabel, monthSummary, roundDiv, type BillRow, type MonthKey } from './calc';
 import Icon from './icons';
 import { centsToAmountInput, dayLabel, parseCents } from './money';
 import SheetBackdrop from './SheetBackdrop';
@@ -26,11 +26,14 @@ export default function Month({ store, month, today }: { store: Store; month: Mo
   const payoff = payoffForMonth(store.data.cards, store.data.purchases, month);
   const perDay = roundDiv(Math.max(0, s.budgetLeftCents), Math.max(1, daysLeft));
 
+  /** What to keep when a bill is unmarked: for an autopay bill, a marker so autopay doesn't record the month again. */
+  const unpaidMark = (row: BillRow) => (row.bill.autoPay ? { skipped: true } : undefined);
+
   async function tick(row: BillRow) {
     if (row.status === 'ended') return;
     const before = row.payment;
     if (row.status === 'paid') {
-      await store.setPayment(month, row.bill.id, undefined);
+      await store.setPayment(month, row.bill.id, unpaidMark(row));
       offer(`${row.bill.name} marked unpaid`, () => store.setPayment(month, row.bill.id, before));
     } else {
       const date = isThisMonth ? today : `${month}-01`;
@@ -186,11 +189,14 @@ export default function Month({ store, month, today }: { store: Store; month: Mo
                     <span>
                       {r.status === 'paid'
                         ? r.payment?.datePaid
-                          ? `Paid ${dayLabel(r.payment.datePaid)}`
+                          ? `${r.payment.auto ? 'Autopaid' : 'Paid'} ${dayLabel(r.payment.datePaid)}`
                           : 'Paid'
                         : r.status === 'ended'
                           ? 'Ended'
-                          : 'Unpaid · tap when paid'}
+                          : r.bill.autoPay && !r.payment?.skipped && month >= r.bill.autoPay.since
+                            ? `Autopay ${dayLabel(autopayDate(month, r.bill.autoPay.day))}`
+                            : 'Unpaid · tap when paid'}
+                      {r.status !== 'ended' && store.data.cards.some((c) => c.id === r.bill.cardId) && ` · pays ${store.data.cards.find((c) => c.id === r.bill.cardId)?.name}`}
                     </span>
                   </span>
                   <span className="bill-amt">
@@ -289,7 +295,7 @@ function BillSheet({ store, month, row, today, onClose }: { store: Store; month:
 
   async function unmark() {
     const before = row.payment;
-    await store.setPayment(month, row.bill.id, undefined);
+    await store.setPayment(month, row.bill.id, row.bill.autoPay ? { skipped: true } : undefined);
     offer(`${row.bill.name} marked unpaid`, () => store.setPayment(month, row.bill.id, before));
     onClose();
   }

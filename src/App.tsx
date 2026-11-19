@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Add from './Add';
 import Cards from './Cards';
-import { addMonths, monthLabel, thisMonth, type MonthKey } from './calc';
+import { debtBillChanges, paidOffIds } from './cards';
+import { addMonths, autopayMonths, monthLabel, thisMonth, type MonthKey } from './calc';
 import Icon, { type IconName } from './icons';
 import Month from './Month';
 import PeriodSheet, { type Period } from './PeriodSheet';
@@ -16,7 +17,7 @@ type Tab = 'summary' | 'cards' | 'add' | 'purchases' | 'setup';
 
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'summary', label: 'Summary', icon: 'year' },
-  { id: 'cards', label: 'Credit Cards', icon: 'card' },
+  { id: 'cards', label: 'Debt', icon: 'card' },
   { id: 'add', label: 'Add', icon: 'add' },
   { id: 'purchases', label: 'Purchases', icon: 'entries' },
   { id: 'setup', label: 'Setup', icon: 'setup' },
@@ -52,6 +53,21 @@ function Main({ store, today }: { store: Store; today: string }) {
   const [year, setYear] = useState(Number(current.slice(0, 4)));
   const [picking, setPicking] = useState(false);
   const motion = useRef('');
+
+  // Debts that are paid off drop their minimum payment bill and stop autopay; a debt that owes again gets its bill back.
+  // Then autopay records the payments of bills whose date has arrived. Both only fill in what is missing, so repeating them is safe.
+  const { bills, months, cards, purchases } = store.data;
+  useEffect(() => {
+    const d = { ...store.data, bills, months, cards, purchases };
+    const changes = debtBillChanges(d, today);
+    if (changes.put.length || changes.remove.length) {
+      void store.applyBillChanges(changes.put, changes.remove);
+      return; // run again with the bills as they now are
+    }
+    const due = autopayMonths(d, today, paidOffIds(d, today));
+    if (due.length) void store.putMonths(due);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [today, bills, months, cards, purchases, settings.firstMonth]);
 
   function go(next: Tab) {
     if (next === tab) return;

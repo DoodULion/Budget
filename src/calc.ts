@@ -29,6 +29,12 @@ export interface Settings {
   setupDone: boolean;
 }
 
+/** Autopay on the `day` of each month (1–31; short months use their last day), starting in the month `since`. */
+export interface AutoPay {
+  day: number;
+  since: MonthKey;
+}
+
 export interface Bill {
   id: string;
   name: string;
@@ -36,6 +42,10 @@ export interface Bill {
   /** The bill ends after this month (e.g. a loan's final payment). */
   lastMonth?: MonthKey;
   note?: string;
+  /** The credit card this bill pays: marking it paid records a payment on that card (see cards.ts). */
+  cardId?: string;
+  /** Autopay: from `since`, each month the bill is recorded as paid on this day of the month (see autopayMonths). */
+  autoPay?: AutoPay;
   /** Removed from the list: hidden from months where it has no payment recorded. */
   deleted?: boolean;
 }
@@ -54,6 +64,10 @@ export interface Category {
 export interface BillPayment {
   datePaid?: DateKey;
   amountPaidCents?: Cents;
+  /** Recorded by autopay rather than by hand. */
+  auto?: boolean;
+  /** Unmarked on purpose: autopay must not record this month again. The bill counts as unpaid. */
+  skipped?: boolean;
 }
 
 export interface Month {
@@ -187,6 +201,37 @@ export function billRows(data: Data, month: MonthKey): BillRow[] {
     rows.push({ bill, amountCents, status, payment, countedCents });
   }
   return rows;
+}
+
+/** The date of the autopay in a month: the day, or the month's last day when the month is shorter. */
+export function autopayDate(month: MonthKey, day: number): DateKey {
+  const [y, m] = month.split('-').map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return `${month}-${String(Math.min(Math.max(1, Math.trunc(day)), last)).padStart(2, '0')}`;
+}
+
+/**
+ * Autopay: the month records that need a payment recorded. For every bill with autopay, each active month from
+ * `since` (not before the first tracked month) up to today's, whose autopay date has arrived and that has no
+ * payment entry yet (not even a "skipped" one), gets the bill paid on that date. Bills that pay a debt in `skipDebts` (paid off) are left out.
+ * Returns the full records of the months that change.
+ */
+export function autopayMonths(data: Data, today: DateKey, skipDebts: ReadonlySet<string> = new Set()): Month[] {
+  const now = monthOf(today);
+  const out = new Map<MonthKey, Month>();
+  for (const bill of data.bills) {
+    if (!bill.autoPay || bill.deleted) continue;
+    if (bill.cardId && skipDebts.has(bill.cardId)) continue; // the debt it pays is paid off
+    for (const month of monthRange(bill.autoPay.since > data.settings.firstMonth ? bill.autoPay.since : data.settings.firstMonth, now)) {
+      if (!isBillActive(bill, month)) continue;
+      const date = autopayDate(month, bill.autoPay.day);
+      if (date > today) continue;
+      const rec = out.get(month) ?? data.months.find((m) => m.month === month) ?? { month, payments: {} };
+      if (rec.payments[bill.id]) continue;
+      out.set(month, { ...rec, payments: { ...rec.payments, [bill.id]: { datePaid: date, auto: true } } });
+    }
+  }
+  return [...out.values()];
 }
 
 /* ---------- categories and purchases ---------- */

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { formatCents, monthLabel, monthOf, purchasesIn, type Purchase } from './calc';
-import { cardSummary } from './cards';
+import { cardSummary, linkedBills } from './cards';
 import Icon from './icons';
 import { centsToAmountInput, newId, parseCents } from './money';
 import type { Store } from './store';
@@ -45,7 +45,7 @@ export default function PurchaseForm({
   let cardLive: number | undefined;
   if (linked && monthOf(date) >= linked.startMonth) {
     const others = initial ? data.purchases.filter((p) => p.id !== initial.id) : data.purchases;
-    cardLive = cardSummary(linked, others, today).balanceNowCents + (monthOf(date) <= monthOf(today) ? (cents ?? 0) : 0);
+    cardLive = cardSummary(linked, others, today, linkedBills(linked, data, today)).balanceNowCents + (monthOf(date) <= monthOf(today) ? (cents ?? 0) : 0);
   }
   const amountBad = cents === undefined || cents === 0;
   const category = data.categories.find((c) => c.id === categoryId);
@@ -161,7 +161,7 @@ export default function PurchaseForm({
             <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
               <span>Paid with</span>
               <div className="chips scroll-row" role="radiogroup" aria-label="Paid with">
-                {data.settings.paidWith.map((m) => (
+                {data.settings.paidWith.filter((m) => m === initial?.paidWith || !data.cards.some((c) => c.name === m && c.closedMonth !== undefined)).map((m) => (
                   <button key={m} type="button" role="radio" aria-checked={m === paidWith} className={m === paidWith ? 'on' : ''} onClick={() => setPaidWith(m === paidWith ? '' : m)}>
                     {m}
                   </button>

@@ -11,17 +11,34 @@
  * A card set to pay in full every month has every finished month's statement paid automatically (on top of any payments entered), so it never carries interest.
  * The month in progress has no interest yet; it shows what would be added if the statement stays unpaid.
  */
-import { addMonths, monthOf, monthRange, roundDiv, type Cents, type DateKey, type MonthKey, type Purchase } from './calc';
+import { billRows, addMonths, type Bill, monthOf, monthRange, roundDiv, type Cents, type Data, type DateKey, type MonthKey, type Purchase } from './calc';
 
 export interface CardPayment {
   id: string;
   date: DateKey;
   amountCents: Cents;
+  /** Set on a payment that comes from a paid bill (not stored on the card): the bill's name. */
+  billName?: string;
 }
 
+/** The kinds of debt. Only credit cards take purchases (through Paid with); loans are paid down by payments alone. */
+export type DebtKind = 'credit-card' | 'personal-loan' | 'student-loan' | 'auto-loan' | 'other';
+export const DEBT_KINDS: { id: DebtKind; label: string }[] = [
+  { id: 'credit-card', label: 'Credit card' },
+  { id: 'personal-loan', label: 'Personal loan' },
+  { id: 'student-loan', label: 'Student loan' },
+  { id: 'auto-loan', label: 'Auto loan' },
+  { id: 'other', label: 'Other debt' },
+];
+export const debtLabel = (d: Pick<CreditCard, 'kind'>) => DEBT_KINDS.find((k) => k.id === (d.kind ?? 'credit-card'))?.label ?? 'Credit card';
+export const isLoan = (d: Pick<CreditCard, 'kind'>) => (d.kind ?? 'credit-card') !== 'credit-card';
+
+/** A debt: a credit card (the default) or a loan. The type keeps its old name from when only cards were tracked. */
 export interface CreditCard {
   id: string;
-  /** Also its name under Paid with, which links purchases to the card. */
+  /** Credit card when missing. */
+  kind?: DebtKind;
+  /** Also its name under Paid with, which links purchases to a credit card. */
   name: string;
   /** APR in hundredths of a percent: 24.99% is 2499. */
   aprBps: number;
@@ -33,6 +50,17 @@ export interface CreditCard {
   plannedPaymentCents?: Cents;
   /** Paid off in full every month: each earlier month's statement counts as paid, so there is no interest. */
   payInFull?: boolean;
+  /**
+   * The card is closed from this month: no new purchases can be added to it, and each month's interest is
+   * the APR ÷ 12 on that month's ending balance.
+   */
+  closedMonth?: MonthKey;
+  /** The minimum monthly payment. It appears in the fixed bills as "<name> payment" and is kept in step (see debtBill). */
+  minPaymentCents?: Cents;
+  /** The day the balance was paid off with "Pay off balance". Once the balance is zero, the minimum payment bill and autopay stop (see isPaidOff). */
+  paidOffDate?: DateKey;
+  /** Interest saved by paying off early instead of making only the minimum, worked out when "Pay off balance" was recorded. */
+  interestSavedCents?: Cents;
   payments: CardPayment[];
 }
 
@@ -55,17 +83,18 @@ export function monthlyInterestCents(balanceCents: Cents, aprBps: number): Cents
 }
 
 /** The purchases charged to this card (by its Paid with name). */
-export function cardCharges(card: Pick<CreditCard, 'name'>, purchases: Purchase[]): Purchase[] {
+export function cardCharges(card: Pick<CreditCard, 'name' | 'kind'>, purchases: Purchase[]): Purchase[] {
+  if (isLoan(card)) return [];
   return purchases.filter((p) => p.paidWith === card.name);
 }
 
 /** The card month by month, from its start month through today's month. */
-export function cardMonths(card: CreditCard, purchases: Purchase[], today: DateKey): CardMonth[] {
+export function cardMonths(card: CreditCard, purchases: Purchase[], today: DateKey, extraPayments: CardPayment[] = []): CardMonth[] {
   const now = monthOf(today);
   const charges = new Map<MonthKey, Cents>();
   for (const p of cardCharges(card, purchases)) charges.set(monthOf(p.date), (charges.get(monthOf(p.date)) ?? 0) + p.amountCents);
   const paid = new Map<MonthKey, Cents>();
-  for (const p of card.payments) paid.set(monthOf(p.date), (paid.get(monthOf(p.date)) ?? 0) + p.amountCents);
+  for (const p of [...card.payments, ...extraPayments]) paid.set(monthOf(p.date), (paid.get(monthOf(p.date)) ?? 0) + p.amountCents);
 
   const rows: CardMonth[] = [];
   let opening = card.startBalanceCents;
@@ -74,10 +103,13 @@ export function cardMonths(card: CreditCard, purchases: Purchase[], today: DateK
     const current = month === now;
     const entered = paid.get(month) ?? 0;
     // Pay-in-full cards: the statement coming in is paid during the month (once the month is over).
-    const p = card.payInFull && !current && opening > entered ? opening : entered;
+    const closed = isLoan(card) || (card.closedMonth !== undefined && month >= card.closedMonth);
+    const p = card.payInFull && !closed && !current && opening > entered ? opening : entered;
+    // A closed card charges interest on the month's ending balance. Otherwise interest is on what is left
+    // of last statement after payments, and none when that statement was paid in full.
     const unpaid = opening - p;
-    const paidInFull = opening > 0 ? unpaid <= 0 : undefined;
-    const interestCents = current || paidInFull !== false ? 0 : monthlyInterestCents(unpaid, card.aprBps);
+    const paidInFull = closed ? undefined : opening > 0 ? unpaid <= 0 : undefined;
+    const interestCents = current ? 0 : closed ? monthlyInterestCents(opening + c - p, card.aprBps) : paidInFull !== false ? 0 : monthlyInterestCents(unpaid, card.aprBps);
     const closingCents = opening + c - p + interestCents;
     rows.push({ month, openingCents: opening, chargesCents: c, paymentsCents: p, interestCents, closingCents, paidInFull, current });
     opening = closingCents;
@@ -108,6 +140,23 @@ export function payoff(balanceCents: Cents, aprBps: number, monthlyCents: Cents 
   return { kind: 'never' };
 }
 
+export type InterestSaved = { kind: 'saved'; cents: Cents; months: number; minimumCents: Cents } | { kind: 'never'; minimumCents: Cents };
+
+/**
+ * What paying off now saves compared with paying only the minimum every month from this month until it is gone
+ * (the interest those minimums would still have added). Undefined when there is no minimum to compare with.
+ */
+export function interestSaved(balanceCents: Cents, aprBps: number, minimumCents: Cents | undefined, thisMonth: MonthKey): InterestSaved | undefined {
+  if (balanceCents <= 0 || !minimumCents || minimumCents <= 0) return undefined;
+  const p = payoff(balanceCents, aprBps, minimumCents, thisMonth);
+  if (p.kind === 'months') return { kind: 'saved', cents: p.interestCents, months: p.months, minimumCents };
+  if (p.kind === 'never') return { kind: 'never', minimumCents };
+  return undefined;
+}
+
+/** The minimum payment to compare with: the debt's own, else what its linked bills add up to. */
+export const minimumFor = (card: CreditCard, linked: LinkedBills): Cents | undefined => card.minPaymentCents || linked.billAmountCents || undefined;
+
 export interface CardSummary {
   card: CreditCard;
   rows: CardMonth[];
@@ -115,7 +164,11 @@ export interface CardSummary {
   /** Last month's closing balance: pay this in full this month to avoid interest. */
   statementCents: Cents;
   leftToAvoidInterestCents: Cents;
-  /** Interest added at the end of this month if the rest of the statement stays unpaid. */
+  /** Closed account (see `closedMonth`). */
+  closed: boolean;
+  /** A loan (not a credit card). */
+  loan: boolean;
+  /** Interest added at the end of this month: if the rest of the statement stays unpaid, or on the ending balance of a closed card. */
   projectedInterestCents: Cents;
   chargesThisMonthCents: Cents;
   chargesThisYearCents: Cents;
@@ -134,15 +187,19 @@ export interface CardSummary {
   /** The planned payment, else the average payment. */
   payoffPaymentCents?: Cents;
   payoffUsesAverage: boolean;
+  /** The payoff estimate uses the linked bill's amount. */
+  payoffUsesBill: boolean;
+  /** Payments from linked bills (already counted in the figures above). */
+  billPayments: CardPayment[];
   payoff: Payoff;
   /** Charges this year by category id. */
   byCategory: { categoryId: string; cents: Cents }[];
 }
 
-export function cardSummary(card: CreditCard, purchases: Purchase[], today: DateKey): CardSummary {
+export function cardSummary(card: CreditCard, purchases: Purchase[], today: DateKey, linked: LinkedBills = NO_LINKS): CardSummary {
   const now = monthOf(today);
   const year = now.slice(0, 4);
-  const rows = cardMonths(card, purchases, today);
+  const rows = cardMonths(card, purchases, today, linked.payments);
   const cur = rows[rows.length - 1];
   const balanceNowCents = cur ? cur.closingCents : card.startBalanceCents;
   const statementCents = Math.max(0, cur ? cur.openingCents : card.startBalanceCents);
@@ -152,7 +209,8 @@ export function cardSummary(card: CreditCard, purchases: Purchase[], today: Date
   const finished = rows.filter((r) => !r.current);
   const statements = finished.filter((r) => r.paidInFull !== undefined);
   const avgPaymentCents = finished.length ? roundDiv(sum(finished, (r) => r.paymentsCents), finished.length) : 0;
-  const payoffPaymentCents = card.plannedPaymentCents || avgPaymentCents || undefined;
+  const closed = isLoan(card) || (card.closedMonth !== undefined && card.closedMonth <= now);
+  const payoffPaymentCents = card.plannedPaymentCents || linked.billAmountCents || avgPaymentCents || undefined;
 
   const cats = new Map<string, Cents>();
   for (const p of cardCharges(card, purchases)) {
@@ -166,7 +224,9 @@ export function cardSummary(card: CreditCard, purchases: Purchase[], today: Date
     balanceNowCents,
     statementCents,
     leftToAvoidInterestCents,
-    projectedInterestCents: monthlyInterestCents(leftToAvoidInterestCents, card.aprBps),
+    projectedInterestCents: closed ? monthlyInterestCents(balanceNowCents, card.aprBps) : monthlyInterestCents(leftToAvoidInterestCents, card.aprBps),
+    closed,
+    loan: isLoan(card),
     chargesThisMonthCents: cur?.chargesCents ?? 0,
     chargesThisYearCents: sum(thisYear, (r) => r.chargesCents),
     chargesAllCents: sum(rows, (r) => r.chargesCents),
@@ -179,8 +239,10 @@ export function cardSummary(card: CreditCard, purchases: Purchase[], today: Date
     avgPaymentCents,
     utilization: card.limitCents ? balanceNowCents / card.limitCents : undefined,
     payoffPaymentCents,
-    payoffUsesAverage: !card.plannedPaymentCents && !!avgPaymentCents,
-    payoff: card.payInFull ? { kind: 'full' } : payoff(balanceNowCents, card.aprBps, payoffPaymentCents, now),
+    payoffUsesAverage: !card.plannedPaymentCents && !linked.billAmountCents && !!avgPaymentCents,
+    payoffUsesBill: !card.plannedPaymentCents && !!linked.billAmountCents,
+    billPayments: linked.payments,
+    payoff: card.payInFull && !closed && !isLoan(card) ? { kind: 'full' } : payoff(balanceNowCents, card.aprBps, payoffPaymentCents, now),
     byCategory: [...cats].map(([categoryId, cents]) => ({ categoryId, cents })).sort((a, b) => b.cents - a.cents),
   };
 }
@@ -217,6 +279,34 @@ export function projection(balanceCents: Cents, aprBps: number, monthlyCents: Ce
   return out;
 }
 
+/** What the bills linked to a card contribute. */
+export interface LinkedBills {
+  payments: CardPayment[];
+  /** The linked bills' monthly amounts added up (0 when none, or all have ended). */
+  billAmountCents: Cents;
+}
+const NO_LINKS: LinkedBills = { payments: [], billAmountCents: 0 };
+
+/**
+ * Bills linked to this card (`Bill.cardId`): every month such a bill is marked paid counts as a payment on the card,
+ * for the amount paid (else the bill's amount), dated the day it was paid (else the 1st). Unmarking it removes the payment.
+ */
+export function linkedBills(card: CreditCard, data: Pick<Data, 'bills' | 'months'>, today: DateKey): LinkedBills {
+  const bills = data.bills.filter((b) => b.cardId === card.id);
+  if (bills.length === 0) return NO_LINKS;
+  const now = monthOf(today);
+  const payments: CardPayment[] = [];
+  for (const m of data.months) {
+    if (m.month > now) continue;
+    for (const row of billRows({ ...data, bills } as Data, m.month)) {
+      if (row.status !== 'paid') continue;
+      payments.push({ id: `bill:${row.bill.id}:${m.month}`, date: row.payment?.datePaid ?? `${m.month}-01`, amountCents: row.countedCents, billName: row.bill.name });
+    }
+  }
+  const billAmountCents = bills.filter((b) => !b.deleted && (b.lastMonth === undefined || b.lastMonth >= now)).reduce((sum, b) => sum + b.amountCents, 0);
+  return { payments, billAmountCents };
+}
+
 /** Total owed across cards at the end of each month, from the earliest start through today's month. */
 export function totalSeries(summaries: CardSummary[], today: DateKey): { month: MonthKey; cents: Cents }[] {
   if (summaries.length === 0) return [];
@@ -233,6 +323,58 @@ export function payoffForMonth(cards: CreditCard[], purchases: Purchase[], month
     .filter((c) => c.payInFull)
     .map((card) => ({ card, cents: cardCharges(card, purchases).filter((p) => monthOf(p.date) === month).reduce((s, p) => s + p.amountCents, 0) }));
   return { totalCents: byCard.reduce((s, c) => s + c.cents, 0), byCard };
+}
+
+/**
+ * Paid off: nothing owed and either paid off on purpose ("Pay off balance") or a loan / closed card whose payments have cleared it.
+ * A credit card that is still open and merely at $0 (say, between charges) is not paid off unless it was paid off on purpose.
+ */
+export function isPaidOff(card: CreditCard, s: Pick<CardSummary, 'balanceNowCents' | 'paymentsAllCents' | 'closed'>): boolean {
+  return s.balanceNowCents <= 0 && (card.paidOffDate !== undefined || (s.closed && s.paymentsAllCents > 0));
+}
+
+/** The ids of the debts that are paid off. */
+export function paidOffIds(data: Data, today: DateKey): Set<string> {
+  return new Set(data.cards.filter((c) => isPaidOff(c, cardSummary(c, data.purchases, today, linkedBills(c, data, today)))).map((c) => c.id));
+}
+
+/**
+ * Keeps the minimum payment bills in step with how the debts stand: a paid-off debt's bill is removed, and an open
+ * debt that has a minimum but no bill (a bill removed because it was paid off, then a new balance) gets it back.
+ */
+export function debtBillChanges(data: Data, today: DateKey): { put: Bill[]; remove: string[] } {
+  const paidOff = paidOffIds(data, today);
+  const put: Bill[] = [];
+  const remove: string[] = [];
+  for (const card of data.cards) {
+    const existing = data.bills.find((b) => b.id === debtBillId(card.id));
+    const live = existing && !existing.deleted ? existing : undefined;
+    if (paidOff.has(card.id)) {
+      if (live) remove.push(live.id);
+    } else if (!live) {
+      const bill = debtBill(card, existing);
+      if (bill) put.push(bill);
+    }
+  }
+  return { put, remove };
+}
+
+/** The id of the fixed bill that carries a debt's minimum payment. */
+export const debtBillId = (debtId: string) => `debt:${debtId}`;
+export const isDebtBill = (b: Pick<Bill, 'id'>) => b.id.startsWith('debt:');
+
+/**
+ * The fixed bill for a debt's minimum payment ("<name> payment", the minimum as its amount, linked to the debt),
+ * or undefined when the debt has no minimum (or is a card paid in full each month). Keeps what the bill already has
+ * that the debt doesn't decide (autopay, last month, note) from `existing`.
+ */
+export function debtBill(debt: CreditCard, existing?: Bill): Bill | undefined {
+  if (!debt.minPaymentCents || (debt.payInFull && !isLoan(debt))) return undefined;
+  const bill: Bill = { id: debtBillId(debt.id), name: `${debt.name} payment`, amountCents: debt.minPaymentCents, cardId: debt.id };
+  if (existing?.lastMonth) bill.lastMonth = existing.lastMonth;
+  if (existing?.note) bill.note = existing.note;
+  if (existing?.autoPay) bill.autoPay = existing.autoPay;
+  return bill;
 }
 
 /** The name of this line on Month. */

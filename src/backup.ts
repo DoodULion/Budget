@@ -71,7 +71,7 @@ export function parseBackup(text: string): Data {
     bills: checkList<Bill>(
       d.bills,
       'bills',
-      (b) => isStr(b.id) && isStr(b.name) && isInt(b.amountCents) && (b.lastMonth === undefined || isMonth(b.lastMonth)) && optStr(b.note),
+      (b) => isStr(b.id) && isStr(b.name) && isInt(b.amountCents) && (b.lastMonth === undefined || isMonth(b.lastMonth)) && optStr(b.note) && optStr(b.cardId) && (b.autoPay === undefined || (isObj(b.autoPay) && Number.isInteger(b.autoPay.day) && (b.autoPay.day as number) >= 1 && (b.autoPay.day as number) <= 31 && isMonth(b.autoPay.since))),
     ),
     // Backups made before the Cards tab have no cards.
     cards: d.cards === undefined ? [] : checkList<CreditCard>(
@@ -86,6 +86,11 @@ export function parseBackup(text: string): Data {
         optInt(c.limitCents) &&
         optInt(c.plannedPaymentCents) &&
         (c.payInFull === undefined || typeof c.payInFull === 'boolean') &&
+        (c.closedMonth === undefined || isMonth(c.closedMonth)) &&
+        (c.kind === undefined || ['credit-card', 'personal-loan', 'student-loan', 'auto-loan', 'other'].includes(c.kind as string)) &&
+        optInt(c.minPaymentCents) &&
+        (c.paidOffDate === undefined || isDate(c.paidOffDate)) &&
+        optInt(c.interestSavedCents) &&
         Array.isArray(c.payments) &&
         c.payments.every((p) => isObj(p) && isStr(p.id) && isDate(p.date) && isInt(p.amountCents)),
     ),
@@ -102,7 +107,7 @@ export function parseBackup(text: string): Data {
         optInt(m.incomeCents) &&
         isObj(m.payments) &&
         Object.values(m.payments).every(
-          (p) => isObj(p) && (p.datePaid === undefined || isDate(p.datePaid)) && optInt(p.amountPaidCents),
+          (p) => isObj(p) && (p.datePaid === undefined || isDate(p.datePaid)) && optInt(p.amountPaidCents) && (p.auto === undefined || typeof p.auto === 'boolean') && (p.skipped === undefined || typeof p.skipped === 'boolean'),
         ),
     ),
     purchases: checkList<Purchase>(
