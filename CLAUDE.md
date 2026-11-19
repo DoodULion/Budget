@@ -50,7 +50,7 @@ All data stays on the device in IndexedDB. No accounts, no backend and no networ
 
 **Bill** (fixed monthly bills, my own list): `id`, `name`, `amountCents`, `lastMonth` (optional `YYYY-MM`: the bill ends after this month, e.g. a car loan's final payment), `note` (optional). Changing a bill's amount applies to every month that has not recorded its own paid amount.
 
-**Category** (spending categories, my own list): `id`, `name`, `budgetCents` (monthly budget), `color`. The first-run setup suggests names only (Food, Shopping, Entertainment, Misc) with empty budgets. A deleted category stops being offered but stays on past purchases and in their totals.
+**Category** (spending categories, my own list): `id`, `name`, `budgetCents` (monthly budget), `color`, `hidden` (optional: not offered on Add). The first-run setup suggests names only (Food, Shopping, Entertainment, Misc) with empty budgets. A deleted category stops being offered but stays on past purchases and in their totals.
 
 **Month** (one per tracked month, created when first needed): `month` (`YYYY-MM`), `incomeCents` (optional: the income actually received; blank means the baseline), and per bill a `BillPayment`: `billId`, `datePaid` (optional), `amountPaidCents` (optional).
 
@@ -86,13 +86,17 @@ Put these in a pure TypeScript module (`src/calc.ts`) with no UI code, and test 
 
 **First-run setup** (shown until finished; everything editable later under Setup): income baseline, savings goal, starting checking balance, first month, my bills (name, amount, optional last month), my categories with monthly budgets, and my payment methods. Shows Left for spending live and warns if the budgets add up to more. Nothing is pre-filled except suggested category names.
 
-A bottom tab bar:
+A bottom tab bar: Summary, Add, Purchases, Setup.
 
-1. **Month** (opens on This month, with ‹ › to change month): budget left and spent with a meter, income (tap to enter the actual amount), saved and vs goal, each category's spent / budget / left as meters, and the bills checklist (Paid / Unpaid / Ended; tapping an unpaid bill marks it paid today, ⋮ to set date or a different amount, or to unmark).
-2. **Add**: a purchase in a few taps: amount, category tiles, date (today by default), optional description, paid with and note. Shows the category's left this month as you type.
-3. **Purchases**: the month's purchases grouped by day with day totals, search and filter (category, paid with, amount range), ⋮ for Edit / Delete with Undo for about 7 seconds, as in Trip Tracker.
-4. **Year**: saved to date, months goal met, checking balance now; a month-by-month table (income, bills paid, spent, budget left, saved, vs goal, balance) and SVG charts (saved per month against the goal, balance over the year, spending by category).
-5. **Setup**: the settings, bills, categories and payment methods, Left for spending and Freed up figures, plus App settings (theme, backup, CSV export, delete all data).
+At the top of Summary and Purchases, ‹ period › steps one month (or year) at a time; tapping the period opens a picker with **Month / Year** and a grid to jump to any month (first tracked month to 12 months ahead) or any year, plus This month / This year. Purchases always shows a month.
+
+On Summary (Month and Year views), holding a card and dragging it rearranges the cards (no on-screen hint), with the same motion as Trip Tracker. Each view's order is a per-device preference, not in backups.
+
+1. **Summary, Month view** (opens on This month): budget left and spent with a meter, income (tap to enter the actual amount), saved and vs goal, each category's spent / budget / left as meters, and the bills checklist (Paid / Unpaid / Ended; tapping an unpaid bill marks it paid today, ⋮ to set date or a different amount, or to unmark).
+2. **Summary, Year view**: saved to date, months goal met, checking balance now; a month-by-month table (income, bills paid, spent, budget left, saved, vs goal, balance) and SVG charts (saved per month against the goal, balance over the year, spending by category).
+3. **Add**: a purchase in a few taps: amount, category tiles, date (today by default), optional description, paid with and note. Shows the category's left this month as you type. Offers the categories chosen under Setup, plus **New category** (name and budget) which joins the list and is selected.
+4. **Purchases**: the month's purchases grouped by day with day totals, search and filter (category, paid with, amount range), ⋮ for Edit / Delete with Undo for about 7 seconds, as in Trip Tracker.
+5. **Setup**: the settings, bills, categories and payment methods, Left for spending and Freed up figures, plus App settings (theme, backup, CSV export, delete all data). Under the categories, **Show on the Add tab** picks which categories Add offers (at least one); a hidden category keeps its budget and still shows on Summary.
 
 ## Backup
 

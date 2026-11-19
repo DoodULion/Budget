@@ -45,6 +45,8 @@ export interface Category {
   color: string;
   /** No longer offered; stays on past purchases and in their totals. */
   deleted?: boolean;
+  /** Left off the Add tab's category tiles (chosen under Setup). Still budgeted and shown on Summary. */
+  hidden?: boolean;
 }
 
 export interface BillPayment {

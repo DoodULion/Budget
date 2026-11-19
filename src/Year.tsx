@@ -1,5 +1,9 @@
+import { Fragment, type JSX } from 'react';
+import { useCardOrder } from './useCardOrder';
+import { useHoldDrag } from './useHoldDrag';
 import { formatCents, monthLabel, yearSummary, type YearSummary } from './calc';
 import { CatTile, Fig, signed } from './ui';
+const YEAR_CARDS = ['saved-ytd', 'saved-chart', 'balance', 'categories', 'table'] as const;
 
 const SHORT = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
 const short = (month: string) => SHORT[Number(month.slice(5, 7)) - 1];
@@ -17,121 +21,142 @@ export default function Year({ store, year, today }: { store: { data: import('./
   const goal = store.data.settings.savingsGoalCents;
   const nothingYet = y.monthsCounted === 0;
 
+  // Hold a card and drag it to rearrange the screen; the order is kept on this device.
+  const [cardOrder, setCardOrder] = useCardOrder('year', YEAR_CARDS);
+  const { order, dragId, listRef, bind, justDragged } = useHoldDrag(cardOrder, setCardOrder, ':scope > [data-id]');
+  const drag = (id: string, cls: string) => ({ ...bind(id), className: `${cls} sum-card${dragId === id ? ' lifted' : ''}` });
+
+  const cards: Record<string, JSX.Element> = {
+    'saved-ytd': (
+      <section {...drag('saved-ytd', 'card hero')} aria-labelledby="ytd-h">
+        <h2 id="ytd-h">Saved in {year}</h2>
+        <p className={`big fit${y.savedToDateCents < 0 ? ' bad-text' : ''}`} style={{ ['--chars' as string]: Math.max(formatCents(y.savedToDateCents).length, 4) }}>
+          {formatCents(y.savedToDateCents)}
+        </p>
+        <div className="rule">
+          <div>
+            <Fig text={y.monthsGoalMetLabel} />
+            <span className="muted">Months goal met</span>
+          </div>
+          <div>
+            <Fig cents={y.checkingBalanceNowCents} />
+            <span className="muted">Checking now</span>
+          </div>
+          <div>
+            <Fig cents={goal} />
+            <span className="muted">Goal / month</span>
+          </div>
+        </div>
+        {nothingYet && <p className="muted small">Figures fill in once {monthLabel(y.thisMonth)} starts.</p>}
+      </section>
+
+    ),
+    'saved-chart': (
+      <section {...drag('saved-chart', 'card')} aria-labelledby="sv-h">
+        <h2 id="sv-h">Saved each month</h2>
+        <SavedChart y={y} goal={goal} />
+        <p className="chart-key">
+          <span><i />Goal met</span>
+          <span><i className="k-below" />Under goal</span>
+          <span><i className="k-neg" />Lost money</span>
+          <span><i className="k-goal" />Goal {formatCents(goal)}</span>
+        </p>
+      </section>
+
+    ),
+    balance: (
+      <section {...drag('balance', 'card')} aria-labelledby="bal-h">
+        <h2 id="bal-h">Checking balance</h2>
+        <BalanceChart y={y} start={store.data.settings.startingBalanceCents} />
+      </section>
+
+    ),
+    categories: (
+      <section {...drag('categories', 'card')} aria-labelledby="yc-h">
+        <h2 id="yc-h">Spending by category</h2>
+        {y.categories.length === 0 ? (
+          <p className="empty-line">No categories yet.</p>
+        ) : (
+          <ul className="hbars">
+            {(() => {
+              const max = Math.max(1, ...y.categories.map((c) => c.totalCents));
+              return y.categories.map((c) => (
+                <li key={c.category.id}>
+                  <span className="hb-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    <CatTile category={c.category} small />
+                    {c.category.name}
+                  </span>
+                  <b>{formatCents(c.totalCents)}</b>
+                  <span className="hb-track">
+                    <i style={{ width: `${(c.totalCents / max) * 100}%`, ['--meter' as string]: `var(--cat-${c.category.color})` }} />
+                  </span>
+                  <span className="st-sub" style={{ gridColumn: '1 / -1' }}>
+                    {formatCents(c.avgPerMonthCents)} a month on average · budget {formatCents(c.budgetCents)}
+                  </span>
+                </li>
+              ));
+            })()}
+          </ul>
+        )}
+      </section>
+
+    ),
+    table: (
+      <section {...drag('table', 'card span-all')} aria-labelledby="tbl-h">
+        <h2 id="tbl-h">Month by month</h2>
+        <div className="table-wrap" tabIndex={0} role="region" aria-labelledby="tbl-h">
+          <table className="ytable">
+            <thead>
+              <tr>
+                <th scope="col">Month</th>
+                <th scope="col">Income</th>
+                <th scope="col">Bills paid</th>
+                <th scope="col">Spent</th>
+                <th scope="col">Budget left</th>
+                <th scope="col">Saved</th>
+                <th scope="col">vs goal</th>
+                <th scope="col">Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {y.rows.map(({ summary: s, balanceCents }) => (
+                <tr key={s.month} className={`${s.future ? 'future' : ''}${s.month === y.thisMonth ? ' now' : ''}`}>
+                  <th scope="row">{monthLabel(s.month).slice(0, 3)}</th>
+                  <td>{formatCents(s.incomeCents)}</td>
+                  <td>{formatCents(s.billsPaidCents)}</td>
+                  <td>{formatCents(s.spentCents)}</td>
+                  <td className={s.budgetLeftCents < 0 ? 'fig-neg' : ''}>{formatCents(s.budgetLeftCents)}</td>
+                  <td>{s.savedCents === undefined ? '—' : formatCents(s.savedCents)}</td>
+                  <td className={s.vsGoalCents === undefined ? '' : s.vsGoalCents < 0 ? 'fig-neg' : 'fig-pos'}>{s.vsGoalCents === undefined ? '—' : signed(s.vsGoalCents)}</td>
+                  <td>{balanceCents === undefined ? '—' : formatCents(balanceCents)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <th scope="row">Total</th>
+                <td>{formatCents(y.rows.filter((r) => !r.summary.future).reduce((s, r) => s + r.summary.incomeCents, 0))}</td>
+                <td>{formatCents(y.rows.reduce((s, r) => s + r.summary.billsPaidCents, 0))}</td>
+                <td>{formatCents(y.rows.reduce((s, r) => s + r.summary.spentCents, 0))}</td>
+                <td />
+                <td>{formatCents(y.savedToDateCents)}</td>
+                <td />
+                <td>{formatCents(y.checkingBalanceNowCents)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
+    ),
+  };
+
   return (
     <div className="screen">
       <h1>{year}</h1>
-      <div className="cols">
-        <section className="card hero" aria-labelledby="ytd-h">
-          <h2 id="ytd-h">Saved in {year}</h2>
-          <p className={`big fit${y.savedToDateCents < 0 ? ' bad-text' : ''}`} style={{ ['--chars' as string]: Math.max(formatCents(y.savedToDateCents).length, 4) }}>
-            {formatCents(y.savedToDateCents)}
-          </p>
-          <div className="rule">
-            <div>
-              <Fig text={y.monthsGoalMetLabel} />
-              <span className="muted">Months goal met</span>
-            </div>
-            <div>
-              <Fig cents={y.checkingBalanceNowCents} />
-              <span className="muted">Checking now</span>
-            </div>
-            <div>
-              <Fig cents={goal} />
-              <span className="muted">Goal / month</span>
-            </div>
-          </div>
-          {nothingYet && <p className="muted small">Figures fill in once {monthLabel(y.thisMonth)} starts.</p>}
-        </section>
-
-        <section className="card" aria-labelledby="sv-h">
-          <h2 id="sv-h">Saved each month</h2>
-          <SavedChart y={y} goal={goal} />
-          <p className="chart-key">
-            <span><i />Goal met</span>
-            <span><i className="k-below" />Under goal</span>
-            <span><i className="k-neg" />Lost money</span>
-            <span><i className="k-goal" />Goal {formatCents(goal)}</span>
-          </p>
-        </section>
-
-        <section className="card" aria-labelledby="bal-h">
-          <h2 id="bal-h">Checking balance</h2>
-          <BalanceChart y={y} start={store.data.settings.startingBalanceCents} />
-        </section>
-
-        <section className="card" aria-labelledby="yc-h">
-          <h2 id="yc-h">Spending by category</h2>
-          {y.categories.length === 0 ? (
-            <p className="empty-line">No categories yet.</p>
-          ) : (
-            <ul className="hbars">
-              {(() => {
-                const max = Math.max(1, ...y.categories.map((c) => c.totalCents));
-                return y.categories.map((c) => (
-                  <li key={c.category.id}>
-                    <span className="hb-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      <CatTile category={c.category} small />
-                      {c.category.name}
-                    </span>
-                    <b>{formatCents(c.totalCents)}</b>
-                    <span className="hb-track">
-                      <i style={{ width: `${(c.totalCents / max) * 100}%`, ['--meter' as string]: `var(--cat-${c.category.color})` }} />
-                    </span>
-                    <span className="st-sub" style={{ gridColumn: '1 / -1' }}>
-                      {formatCents(c.avgPerMonthCents)} a month on average · budget {formatCents(c.budgetCents)}
-                    </span>
-                  </li>
-                ));
-              })()}
-            </ul>
-          )}
-        </section>
-
-        <section className="card span-all" aria-labelledby="tbl-h">
-          <h2 id="tbl-h">Month by month</h2>
-          <div className="table-wrap" tabIndex={0} role="region" aria-labelledby="tbl-h">
-            <table className="ytable">
-              <thead>
-                <tr>
-                  <th scope="col">Month</th>
-                  <th scope="col">Income</th>
-                  <th scope="col">Bills paid</th>
-                  <th scope="col">Spent</th>
-                  <th scope="col">Budget left</th>
-                  <th scope="col">Saved</th>
-                  <th scope="col">vs goal</th>
-                  <th scope="col">Balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {y.rows.map(({ summary: s, balanceCents }) => (
-                  <tr key={s.month} className={`${s.future ? 'future' : ''}${s.month === y.thisMonth ? ' now' : ''}`}>
-                    <th scope="row">{monthLabel(s.month).slice(0, 3)}</th>
-                    <td>{formatCents(s.incomeCents)}</td>
-                    <td>{formatCents(s.billsPaidCents)}</td>
-                    <td>{formatCents(s.spentCents)}</td>
-                    <td className={s.budgetLeftCents < 0 ? 'fig-neg' : ''}>{formatCents(s.budgetLeftCents)}</td>
-                    <td>{s.savedCents === undefined ? '—' : formatCents(s.savedCents)}</td>
-                    <td className={s.vsGoalCents === undefined ? '' : s.vsGoalCents < 0 ? 'fig-neg' : 'fig-pos'}>{s.vsGoalCents === undefined ? '—' : signed(s.vsGoalCents)}</td>
-                    <td>{balanceCents === undefined ? '—' : formatCents(balanceCents)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <th scope="row">Total</th>
-                  <td>{formatCents(y.rows.filter((r) => !r.summary.future).reduce((s, r) => s + r.summary.incomeCents, 0))}</td>
-                  <td>{formatCents(y.rows.reduce((s, r) => s + r.summary.billsPaidCents, 0))}</td>
-                  <td>{formatCents(y.rows.reduce((s, r) => s + r.summary.spentCents, 0))}</td>
-                  <td />
-                  <td>{formatCents(y.savedToDateCents)}</td>
-                  <td />
-                  <td>{formatCents(y.checkingBalanceNowCents)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </section>
+      <div className={`cols${dragId ? ' dragging' : ''}`} ref={(el) => { listRef.current = el; }} onClickCapture={(e) => {
+        if (justDragged()) { e.preventDefault(); e.stopPropagation(); }
+      }}>
+        {order.map((id) => <Fragment key={id}>{cards[id]}</Fragment>)}
       </div>
     </div>
   );

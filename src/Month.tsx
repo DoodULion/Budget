@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { Fragment, useState, type JSX } from 'react';
+import { useCardOrder } from './useCardOrder';
+import { useHoldDrag } from './useHoldDrag';
 import { formatCents, monthLabel, monthSummary, roundDiv, type BillRow, type MonthKey } from './calc';
 import Icon from './icons';
 import { centsToAmountInput, dayLabel, parseCents } from './money';
@@ -6,6 +8,7 @@ import SheetBackdrop from './SheetBackdrop';
 import type { Store } from './store';
 import { useUndo } from './undo';
 import { CatTile, Fig, Meter, MoneyInput, signed } from './ui';
+const MONTH_CARDS = ['left', 'saved', 'categories', 'bills'] as const;
 
 /** The month at a glance: budget left, saved against the goal, each category, and the bills checklist. */
 export default function Month({ store, month, today }: { store: Store; month: MonthKey; today: string }) {
@@ -34,154 +37,173 @@ export default function Month({ store, month, today }: { store: Store; month: Mo
     }
   }
 
+  // Hold a card and drag it to rearrange the screen; the order is kept on this device.
+  const [cardOrder, setCardOrder] = useCardOrder('month', MONTH_CARDS);
+  const { order, dragId, listRef, bind, justDragged } = useHoldDrag(cardOrder, setCardOrder, ':scope > [data-id]');
+  const drag = (id: string, cls: string) => ({ ...bind(id), className: `${cls} sum-card${dragId === id ? ' lifted' : ''}` });
+
+  const cards: Record<string, JSX.Element> = {
+    left: (
+      <section {...drag('left', `card hero${over ? ' over' : ''}`)} aria-labelledby="left-h">
+        <div className="card-head">
+          <h2 id="left-h">
+            {over && <Icon name="alert" />}
+            {over ? 'Over budget by' : 'Budget left'}
+          </h2>
+        </div>
+        <p className="big fit" style={{ ['--chars' as string]: Math.max(leftText.length, 4) }}>
+          {over ? formatCents(-s.budgetLeftCents) : leftText}
+        </p>
+        <Meter spent={s.spentCents} budget={s.spendingBudgetCents} label="Spent of this month's spending budget" />
+        <div className="rule">
+          <div>
+            <Fig cents={s.spentCents} />
+            <span className="muted">Spent</span>
+          </div>
+          <div>
+            <Fig cents={s.spendingBudgetCents} />
+            <span className="muted">Budget</span>
+          </div>
+          {isThisMonth && !over ? (
+            <div>
+              <Fig cents={perDay} />
+              <span className="muted">Left per day</span>
+            </div>
+          ) : (
+            <div>
+              <Fig text={String(s.unpaidCount)} />
+              <span className="muted">Bills unpaid</span>
+            </div>
+          )}
+        </div>
+      </section>
+
+    ),
+    saved: (
+      <section {...drag('saved', 'card')} aria-labelledby="saved-h">
+        <div className="card-head">
+          <h2 id="saved-h">Saved</h2>
+          {s.vsGoalCents !== undefined && (
+            <span className={`pill${s.vsGoalCents < 0 ? ' red' : ''}`}>{s.vsGoalCents < 0 ? 'Under goal' : 'Goal met'}</span>
+          )}
+          {s.future && <span className="pill idle">Not started</span>}
+        </div>
+        <dl className="kv">
+          <dt>Income</dt>
+          <dd>
+            <button type="button" className="link" onClick={() => setIncomeOpen(true)} aria-label={`Income ${formatCents(s.incomeCents)}, change`}>
+              {formatCents(s.incomeCents)}
+            </button>
+            {s.incomeIsBaseline && <small>planned · tap to enter actual</small>}
+          </dd>
+          <dt>Bills paid</dt>
+          <dd>−{formatCents(s.billsPaidCents)}</dd>
+          <dt>Spent</dt>
+          <dd>−{formatCents(s.spentCents)}</dd>
+          <dt className="sum-line">Saved</dt>
+          <dd className="sum-line">{s.savedCents === undefined ? '—' : formatCents(s.savedCents)}</dd>
+          <dt>vs goal</dt>
+          <dd className={s.vsGoalCents === undefined ? '' : s.vsGoalCents < 0 ? 'fig-neg' : 'fig-pos'}>
+            {s.vsGoalCents === undefined ? '—' : signed(s.vsGoalCents)}
+          </dd>
+        </dl>
+        {s.future && <p className="muted small">Saved counts once the month starts.</p>}
+      </section>
+
+    ),
+    categories: (
+      <section {...drag('categories', 'card')} aria-labelledby="cat-h">
+        <h2 id="cat-h">By category</h2>
+        {s.byCategory.length === 0 ? (
+          <p className="empty-line">Add categories under Setup.</p>
+        ) : (
+          <ul className="cat-rows">
+            {s.byCategory.map((r) => {
+              const catOver = r.leftCents < 0;
+              return (
+                <li key={r.category.id} className="cat-row">
+                  <CatTile category={r.category} />
+                  <div className="cat-name">
+                    <b>{r.category.name}</b>
+                    <span>
+                      {formatCents(r.spentCents)} of {formatCents(r.budgetCents)}
+                    </span>
+                  </div>
+                  <div className={`cat-left${catOver ? ' over' : ''}`}>
+                    {formatCents(Math.abs(r.leftCents))}
+                    <small>{catOver ? 'over' : 'left'}</small>
+                  </div>
+                  <Meter spent={r.spentCents} budget={r.budgetCents} label={`${r.category.name} spent of budget`} />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+    ),
+    bills: (
+      <section {...drag('bills', 'card')} aria-labelledby="bills-h">
+        <div className="card-head">
+          <h2 id="bills-h">Bills</h2>
+          {s.bills.length > 0 && (
+            <span className={`pill${s.unpaidCount ? ' idle' : ''}`}>{s.unpaidCount ? `${s.unpaidCount} unpaid` : 'All paid'}</span>
+          )}
+        </div>
+        {s.bills.length === 0 ? (
+          <p className="empty-line">Add your fixed bills under Setup.</p>
+        ) : (
+          <ul className="bills">
+            {s.bills.map((r) => (
+              <li key={r.bill.id} className={`bill ${r.status}`}>
+                <button
+                  type="button"
+                  className="bill-tick"
+                  disabled={r.status === 'ended'}
+                  aria-pressed={r.status === 'paid'}
+                  onClick={() => void tick(r)}
+                >
+                  <span className="box">
+                    <Icon name="check" />
+                  </span>
+                  <span className="bill-main">
+                    <b>{r.bill.name}</b>
+                    <span>
+                      {r.status === 'paid'
+                        ? r.payment?.datePaid
+                          ? `Paid ${dayLabel(r.payment.datePaid)}`
+                          : 'Paid'
+                        : r.status === 'ended'
+                          ? 'Ended'
+                          : 'Unpaid · tap when paid'}
+                    </span>
+                  </span>
+                  <span className="bill-amt">
+                    {formatCents(r.status === 'paid' ? r.countedCents : r.bill.amountCents)}
+                    {r.status === 'paid' && r.countedCents !== r.bill.amountCents && <small>of {formatCents(r.bill.amountCents)}</small>}
+                  </span>
+                </button>
+                {r.status !== 'ended' && (
+                  <button type="button" className="more" aria-label={`Options for ${r.bill.name}`} aria-haspopup="dialog" onClick={() => setBillSheet(r)}>
+                    <Icon name="dots" />
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {s.bills.length > 0 && <p className="muted small">An unpaid bill counts toward this month's savings.</p>}
+      </section>
+    ),
+  };
+
   return (
     <div className="screen">
       <h1>{monthLabel(month)}</h1>
-      <div className="cols">
-        <section className={`card hero${over ? ' over' : ''}`} aria-labelledby="left-h">
-          <div className="card-head">
-            <h2 id="left-h">
-              {over && <Icon name="alert" />}
-              {over ? 'Over budget by' : 'Budget left'}
-            </h2>
-          </div>
-          <p className="big fit" style={{ ['--chars' as string]: Math.max(leftText.length, 4) }}>
-            {over ? formatCents(-s.budgetLeftCents) : leftText}
-          </p>
-          <Meter spent={s.spentCents} budget={s.spendingBudgetCents} label="Spent of this month's spending budget" />
-          <div className="rule">
-            <div>
-              <Fig cents={s.spentCents} />
-              <span className="muted">Spent</span>
-            </div>
-            <div>
-              <Fig cents={s.spendingBudgetCents} />
-              <span className="muted">Budget</span>
-            </div>
-            {isThisMonth && !over ? (
-              <div>
-                <Fig cents={perDay} />
-                <span className="muted">Left per day</span>
-              </div>
-            ) : (
-              <div>
-                <Fig text={String(s.unpaidCount)} />
-                <span className="muted">Bills unpaid</span>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="card" aria-labelledby="saved-h">
-          <div className="card-head">
-            <h2 id="saved-h">Saved</h2>
-            {s.vsGoalCents !== undefined && (
-              <span className={`pill${s.vsGoalCents < 0 ? ' red' : ''}`}>{s.vsGoalCents < 0 ? 'Under goal' : 'Goal met'}</span>
-            )}
-            {s.future && <span className="pill idle">Not started</span>}
-          </div>
-          <dl className="kv">
-            <dt>Income</dt>
-            <dd>
-              <button type="button" className="link" onClick={() => setIncomeOpen(true)} aria-label={`Income ${formatCents(s.incomeCents)}, change`}>
-                {formatCents(s.incomeCents)}
-              </button>
-              {s.incomeIsBaseline && <small>planned · tap to enter actual</small>}
-            </dd>
-            <dt>Bills paid</dt>
-            <dd>−{formatCents(s.billsPaidCents)}</dd>
-            <dt>Spent</dt>
-            <dd>−{formatCents(s.spentCents)}</dd>
-            <dt className="sum-line">Saved</dt>
-            <dd className="sum-line">{s.savedCents === undefined ? '—' : formatCents(s.savedCents)}</dd>
-            <dt>vs goal</dt>
-            <dd className={s.vsGoalCents === undefined ? '' : s.vsGoalCents < 0 ? 'fig-neg' : 'fig-pos'}>
-              {s.vsGoalCents === undefined ? '—' : signed(s.vsGoalCents)}
-            </dd>
-          </dl>
-          {s.future && <p className="muted small">Saved counts once the month starts.</p>}
-        </section>
-
-        <section className="card" aria-labelledby="cat-h">
-          <h2 id="cat-h">By category</h2>
-          {s.byCategory.length === 0 ? (
-            <p className="empty-line">Add categories under Setup.</p>
-          ) : (
-            <ul className="cat-rows">
-              {s.byCategory.map((r) => {
-                const catOver = r.leftCents < 0;
-                return (
-                  <li key={r.category.id} className="cat-row">
-                    <CatTile category={r.category} />
-                    <div className="cat-name">
-                      <b>{r.category.name}</b>
-                      <span>
-                        {formatCents(r.spentCents)} of {formatCents(r.budgetCents)}
-                      </span>
-                    </div>
-                    <div className={`cat-left${catOver ? ' over' : ''}`}>
-                      {formatCents(Math.abs(r.leftCents))}
-                      <small>{catOver ? 'over' : 'left'}</small>
-                    </div>
-                    <Meter spent={r.spentCents} budget={r.budgetCents} label={`${r.category.name} spent of budget`} />
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-
-        <section className="card" aria-labelledby="bills-h">
-          <div className="card-head">
-            <h2 id="bills-h">Bills</h2>
-            {s.bills.length > 0 && (
-              <span className={`pill${s.unpaidCount ? ' idle' : ''}`}>{s.unpaidCount ? `${s.unpaidCount} unpaid` : 'All paid'}</span>
-            )}
-          </div>
-          {s.bills.length === 0 ? (
-            <p className="empty-line">Add your fixed bills under Setup.</p>
-          ) : (
-            <ul className="bills">
-              {s.bills.map((r) => (
-                <li key={r.bill.id} className={`bill ${r.status}`}>
-                  <button
-                    type="button"
-                    className="bill-tick"
-                    disabled={r.status === 'ended'}
-                    aria-pressed={r.status === 'paid'}
-                    onClick={() => void tick(r)}
-                  >
-                    <span className="box">
-                      <Icon name="check" />
-                    </span>
-                    <span className="bill-main">
-                      <b>{r.bill.name}</b>
-                      <span>
-                        {r.status === 'paid'
-                          ? r.payment?.datePaid
-                            ? `Paid ${dayLabel(r.payment.datePaid)}`
-                            : 'Paid'
-                          : r.status === 'ended'
-                            ? 'Ended'
-                            : 'Unpaid · tap when paid'}
-                      </span>
-                    </span>
-                    <span className="bill-amt">
-                      {formatCents(r.status === 'paid' ? r.countedCents : r.bill.amountCents)}
-                      {r.status === 'paid' && r.countedCents !== r.bill.amountCents && <small>of {formatCents(r.bill.amountCents)}</small>}
-                    </span>
-                  </button>
-                  {r.status !== 'ended' && (
-                    <button type="button" className="more" aria-label={`Options for ${r.bill.name}`} aria-haspopup="dialog" onClick={() => setBillSheet(r)}>
-                      <Icon name="dots" />
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-          {s.bills.length > 0 && <p className="muted small">An unpaid bill counts toward this month's savings.</p>}
-        </section>
+      <div className={`cols${dragId ? ' dragging' : ''}`} ref={(el) => { listRef.current = el; }} onClickCapture={(e) => {
+        if (justDragged()) { e.preventDefault(); e.stopPropagation(); }
+      }}>
+        {order.map((id) => <Fragment key={id}>{cards[id]}</Fragment>)}
       </div>
 
       {incomeOpen && <IncomeSheet store={store} month={month} onClose={() => setIncomeOpen(false)} />}

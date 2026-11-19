@@ -3,6 +3,7 @@ import { formatCents, monthLabel, monthOf, purchasesIn, type Purchase } from './
 import Icon from './icons';
 import { centsToAmountInput, newId, parseCents } from './money';
 import type { Store } from './store';
+import { CategorySheet } from './Setup';
 import { CatTile, MoneyInput } from './ui';
 
 /**
@@ -25,7 +26,9 @@ export default function PurchaseForm({
   onCancel?: () => void;
 }) {
   const { data } = store;
-  const offered = data.categories.filter((c) => !c.deleted || c.id === initial?.categoryId);
+  // The Add tab offers the categories chosen under Setup; an edited purchase always offers its own.
+  const offered = data.categories.filter((c) => (!c.deleted && !c.hidden) || c.id === initial?.categoryId);
+  const [newCat, setNewCat] = useState(false);
   const [amount, setAmount] = useState(initial ? centsToAmountInput(initial.amountCents) : '');
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? '');
   const [date, setDate] = useState(initial?.date ?? today);
@@ -77,26 +80,24 @@ export default function PurchaseForm({
   }
 
   return (
-    <form
-      className="add-form"
-      noValidate
-      onSubmit={(e) => {
-        e.preventDefault();
-        void submit();
-      }}
-    >
-      <div className="add-col">
-        <label className="field amount-field">
-          <span>Amount</span>
-          <span className="amount-wrap">
-            <MoneyInput value={amount} onValue={setAmount} placeholder="0.00" aria-invalid={tried && amountBad} />
-          </span>
-        </label>
-        <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
-          <span>Category</span>
-          {offered.length === 0 ? (
-            <p className="empty-line">Add a category under Setup first.</p>
-          ) : (
+    <>
+      <form
+        className="add-form"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <div className="add-col">
+          <label className="field amount-field">
+            <span>Amount</span>
+            <span className="amount-wrap">
+              <MoneyInput value={amount} onValue={setAmount} placeholder="0.00" aria-invalid={tried && amountBad} />
+            </span>
+          </label>
+          <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+            <span>Category</span>
             <div className="chips" role="radiogroup" aria-label="Category">
               {offered.map((c) => (
                 <button
@@ -111,58 +112,65 @@ export default function PurchaseForm({
                   {c.name}
                 </button>
               ))}
-            </div>
-          )}
-        </fieldset>
-        {live && (
-          <p className={`live-left${live.left < 0 ? ' over' : ''}`} aria-live="polite">
-            <span>
-              {live.left < 0 && <Icon name="alert" />}
-              {live.name} {live.left < 0 ? 'over' : 'left'} in {monthLabel(month)}
-            </span>
-            <b>{formatCents(Math.abs(live.left))}</b>
-          </p>
-        )}
-      </div>
-      <div className="add-col">
-        <div className="grid2">
-          <label className="field">
-            <span>Date</span>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-invalid={tried && !date} />
-          </label>
-          <label className="field">
-            <span>Description</span>
-            <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" autoComplete="off" />
-          </label>
-        </div>
-        {data.settings.paidWith.length > 0 && (
-          <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
-            <span>Paid with</span>
-            <div className="chips scroll-row" role="radiogroup" aria-label="Paid with">
-              {data.settings.paidWith.map((m) => (
-                <button key={m} type="button" role="radio" aria-checked={m === paidWith} className={m === paidWith ? 'on' : ''} onClick={() => setPaidWith(m === paidWith ? '' : m)}>
-                  {m}
+              {!initial && (
+                <button type="button" className="chip-new" onClick={() => setNewCat(true)}>
+                  <Icon name="add" />
+                  New category
                 </button>
-              ))}
+              )}
             </div>
           </fieldset>
-        )}
-        <label className="field">
-          <span>Note</span>
-          <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional" autoComplete="off" />
-        </label>
-        {tried && errors.length > 0 && <p className="error" role="alert">{errors.join(' · ')}</p>}
-        <div className="sheet-actions">
-          <button type="submit" className="primary" disabled={saving}>
-            {submitLabel}
-          </button>
-          {onCancel && (
-            <button type="button" className="secondary" onClick={onCancel}>
-              Discard changes
-            </button>
+          {live && (
+            <p className={`live-left${live.left < 0 ? ' over' : ''}`} aria-live="polite">
+              <span>
+                {live.left < 0 && <Icon name="alert" />}
+                {live.name} {live.left < 0 ? 'over' : 'left'} in {monthLabel(month)}
+              </span>
+              <b>{formatCents(Math.abs(live.left))}</b>
+            </p>
           )}
         </div>
-      </div>
-    </form>
+        <div className="add-col">
+          <div className="grid2">
+            <label className="field">
+              <span>Date</span>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-invalid={tried && !date} />
+            </label>
+            <label className="field">
+              <span>Description</span>
+              <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" autoComplete="off" />
+            </label>
+          </div>
+          {data.settings.paidWith.length > 0 && (
+            <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+              <span>Paid with</span>
+              <div className="chips scroll-row" role="radiogroup" aria-label="Paid with">
+                {data.settings.paidWith.map((m) => (
+                  <button key={m} type="button" role="radio" aria-checked={m === paidWith} className={m === paidWith ? 'on' : ''} onClick={() => setPaidWith(m === paidWith ? '' : m)}>
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          )}
+          <label className="field">
+            <span>Note</span>
+            <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional" autoComplete="off" />
+          </label>
+          {tried && errors.length > 0 && <p className="error" role="alert">{errors.join(' · ')}</p>}
+          <div className="sheet-actions">
+            <button type="submit" className="primary" disabled={saving}>
+              {submitLabel}
+            </button>
+            {onCancel && (
+              <button type="button" className="secondary" onClick={onCancel}>
+                Discard changes
+              </button>
+            )}
+          </div>
+        </div>
+      </form>
+      {newCat && <CategorySheet store={store} onClose={() => setNewCat(false)} onAdded={(c) => setCategoryId(c.id)} />}
+    </>
   );
 }

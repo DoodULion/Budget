@@ -3,6 +3,7 @@ import Add from './Add';
 import { addMonths, monthLabel, thisMonth, type MonthKey } from './calc';
 import Icon, { type IconName } from './icons';
 import Month from './Month';
+import PeriodSheet, { type Period } from './PeriodSheet';
 import Purchases from './Purchases';
 import Setup from './Setup';
 import { useStore, type Store } from './store';
@@ -10,13 +11,12 @@ import { UndoProvider } from './undo';
 import { useToday } from './useToday';
 import Year from './Year';
 
-type Tab = 'month' | 'add' | 'purchases' | 'year' | 'setup';
+type Tab = 'summary' | 'add' | 'purchases' | 'setup';
 
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
-  { id: 'month', label: 'Month', icon: 'month' },
+  { id: 'summary', label: 'Summary', icon: 'year' },
   { id: 'add', label: 'Add', icon: 'add' },
   { id: 'purchases', label: 'Purchases', icon: 'entries' },
-  { id: 'year', label: 'Year', icon: 'year' },
   { id: 'setup', label: 'Setup', icon: 'setup' },
 ];
 
@@ -43,9 +43,12 @@ function FirstRun({ store, today }: { store: Store; today: string }) {
 function Main({ store, today }: { store: Store; today: string }) {
   const { settings } = store.data;
   const current = thisMonth(settings, today);
-  const [tab, setTab] = useState<Tab>('month');
+  const [tab, setTab] = useState<Tab>('summary');
+  // Summary shows a month or a year; Purchases always shows a month (the Summary's month, or the year's last pick).
+  const [view, setView] = useState<Period['kind']>('month');
   const [month, setMonth] = useState<MonthKey>(current);
   const [year, setYear] = useState(Number(current.slice(0, 4)));
+  const [picking, setPicking] = useState(false);
   const motion = useRef('');
 
   function go(next: Tab) {
@@ -58,30 +61,41 @@ function Main({ store, today }: { store: Store; today: string }) {
   }
 
   const firstYear = Number(settings.firstMonth.slice(0, 4));
-  const lastYear = Math.max(firstYear, Number(current.slice(0, 4)) + 1);
   const lastMonth = addMonths(current, 12);
+  const lastYear = Math.max(firstYear, Number(lastMonth.slice(0, 4)));
+  const curYear = Number(current.slice(0, 4));
+  const showYear = tab === 'summary' && view === 'year';
+  const period: Period = showYear ? { kind: 'year', year } : { kind: 'month', month };
+
+  function pickPeriod(p: Period) {
+    setView(p.kind);
+    if (p.kind === 'month') {
+      setMonth(p.month);
+      setYear(Number(p.month.slice(0, 4)));
+    } else {
+      setYear(p.year);
+    }
+  }
 
   let band;
-  if (tab === 'month' || tab === 'purchases') {
-    band = (
-      <Stepper
-        label={monthLabel(month)}
-        sub={month === current ? 'This month' : undefined}
-        onToday={month === current ? undefined : () => setMonth(current)}
-        prev={month > settings.firstMonth ? () => setMonth(addMonths(month, -1)) : undefined}
-        next={month < lastMonth ? () => setMonth(addMonths(month, 1)) : undefined}
-        unit="month"
-      />
-    );
-  } else if (tab === 'year') {
-    band = (
+  if (tab === 'summary' || tab === 'purchases') {
+    band = showYear ? (
       <Stepper
         label={String(year)}
-        sub={year === Number(current.slice(0, 4)) ? 'This year' : undefined}
-        onToday={year === Number(current.slice(0, 4)) ? undefined : () => setYear(Number(current.slice(0, 4)))}
+        sub={year === curYear ? 'This year' : 'Year'}
+        onOpen={() => setPicking(true)}
         prev={year > firstYear ? () => setYear(year - 1) : undefined}
         next={year < lastYear ? () => setYear(year + 1) : undefined}
         unit="year"
+      />
+    ) : (
+      <Stepper
+        label={monthLabel(month)}
+        sub={month === current ? 'This month' : 'Month'}
+        onOpen={() => setPicking(true)}
+        prev={month > settings.firstMonth ? () => setMonth(addMonths(month, -1)) : undefined}
+        next={month < lastMonth ? () => setMonth(addMonths(month, 1)) : undefined}
+        unit="month"
       />
     );
   } else {
@@ -101,14 +115,16 @@ function Main({ store, today }: { store: Store; today: string }) {
         </header>
         <main>
           <div key={tab} className={`page ${motion.current}`}>
-            {tab === 'month' ? (
-              <Month store={store} month={month} today={today} />
+            {tab === 'summary' ? (
+              view === 'year' ? (
+                <Year store={store} year={year} today={today} />
+              ) : (
+                <Month store={store} month={month} today={today} />
+              )
             ) : tab === 'add' ? (
               <Add store={store} today={today} />
             ) : tab === 'purchases' ? (
               <Purchases store={store} month={month} today={today} />
-            ) : tab === 'year' ? (
-              <Year store={store} year={year} today={today} />
             ) : (
               <Setup store={store} today={today} />
             )}
@@ -122,22 +138,34 @@ function Main({ store, today }: { store: Store; today: string }) {
             </button>
           ))}
         </nav>
+        {picking && (
+          <PeriodSheet
+            value={period}
+            firstMonth={settings.firstMonth}
+            lastMonth={lastMonth}
+            current={current}
+            monthOnly={tab === 'purchases'}
+            onPick={pickPeriod}
+            onClose={() => setPicking(false)}
+          />
+        )}
       </UndoProvider>
     </div>
   );
 }
 
+/** ‹ period › in the band. Tapping the period opens the picker (any month or year, and Month / Year). */
 function Stepper({
   label,
   sub,
-  onToday,
+  onOpen,
   prev,
   next,
   unit,
 }: {
   label: string;
-  sub?: string;
-  onToday?: () => void;
+  sub: string;
+  onOpen: () => void;
   prev?: () => void;
   next?: () => void;
   unit: string;
@@ -147,15 +175,13 @@ function Stepper({
       <button type="button" className="hit" onClick={prev} disabled={!prev} aria-label={`Previous ${unit}`}>
         <Icon name="back" />
       </button>
-      <p className="band-title" aria-live="polite">
-        {label}
-        {sub && <span className="band-sub">{sub}</span>}
-        {onToday && (
-          <button type="button" className="today-btn" onClick={onToday}>
-            Back to this {unit}
-          </button>
-        )}
-      </p>
+      <button type="button" className="band-pick" onClick={onOpen} aria-haspopup="dialog" aria-label={`${label}, ${sub}. Change period`}>
+        <span className="band-title" aria-live="polite">
+          {label}
+          <Icon name="down" />
+        </span>
+        <span className="band-sub">{sub}</span>
+      </button>
       <button type="button" className="hit" onClick={next} disabled={!next} aria-label={`Next ${unit}`}>
         <Icon name="next" />
       </button>

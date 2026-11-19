@@ -309,6 +309,7 @@ function CategoriesCard({ store, today, step }: { store: Store; today: string; s
               <CatTile category={c} />
               <span className="li-main">
                 <b>{c.name}</b>
+                {c.hidden && <span>Not on Add</span>}
               </span>
               <BudgetInput key={c.id + c.budgetCents} category={c} onSave={(cents) => store.putCategory({ ...c, budgetCents: cents })} />
               <button type="button" className="more" aria-label={`Rename or remove ${c.name}`} aria-haspopup="dialog" onClick={() => setEditing(c)}>
@@ -322,12 +323,51 @@ function CategoriesCard({ store, today, step }: { store: Store; today: string; s
         <Icon name="add" />
         Add a category
       </button>
+      {cats.length > 1 && (
+        <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+          <span>Show on the Add tab</span>
+          <div className="chips" role="group" aria-label="Categories shown on the Add tab">
+            {cats.map((c) => {
+              const shown = !c.hidden;
+              const lastShown = shown && cats.filter((x) => !x.hidden).length === 1;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  aria-pressed={shown}
+                  className={shown ? 'on' : ''}
+                  aria-disabled={lastShown}
+                  onClick={() => {
+                    if (lastShown) return;
+                    void store.putCategory({ ...c, hidden: shown ? true : undefined });
+                  }}
+                >
+                  <CatTile category={c} small />
+                  {c.name}
+                </button>
+              );
+            })}
+          </div>
+          <p className="muted small">A hidden category keeps its budget and still shows on Summary. At least one stays on Add.</p>
+        </fieldset>
+      )}
       {editing && <CategorySheet store={store} category={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} />}
     </section>
   );
 }
 
-function CategorySheet({ store, category, onClose }: { store: Store; category?: Category; onClose: () => void }) {
+/** Add a category (from Setup or the Add tab) or rename, rebudget or remove one. */
+export function CategorySheet({
+  store,
+  category,
+  onClose,
+  onAdded,
+}: {
+  store: Store;
+  category?: Category;
+  onClose: () => void;
+  onAdded?: (made: Category) => void;
+}) {
   const [name, setName] = useState(category?.name ?? '');
   const [budget, setBudget] = useState(category?.budgetCents ? centsToAmountInput(category.budgetCents) : '');
   const [tried, setTried] = useState(false);
@@ -346,6 +386,7 @@ function CategorySheet({ store, category, onClose }: { store: Store; category?: 
     } else {
       const made = await store.addCategory(name.trim(), cents);
       offer(`Added ${made.name}`, () => store.removeCategory(made.id));
+      onAdded?.(made);
     }
     onClose();
   }
