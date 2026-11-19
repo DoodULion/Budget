@@ -1005,3 +1005,30 @@ input[type="date"] { padding-left: 10px; padding-right: 8px; font-size: 1rem; }
 .kv dd small.fig-pos { color: var(--good); }
 .kv dd small.fig-neg { color: var(--red); }
 .sim-res-warn { grid-column: 1 / -1; text-align: left; white-space: normal !important; }
+
+/* ---------- Debt tab: the debt dropdown, the Debts / Insights switch, insights ---------- */
+.debt-pick { position: relative; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px; border-radius: var(--r-ctl, 16px); background: var(--sign); border: 1.5px solid var(--line); }
+.debt-pick select { flex: 1; min-width: 0; appearance: none; -webkit-appearance: none; border: 0; background: none; color: var(--ink); font: inherit; font-size: 17px; font-weight: 800; min-height: 50px; padding: 0 28px 0 0; outline: none; text-overflow: ellipsis; }
+.debt-pick > .ic { position: absolute; right: 14px; width: 20px; height: 20px; color: var(--mute); pointer-events: none; }
+.debt-pick:focus-within { outline: 3px solid var(--or); outline-offset: 2px; }
+.group-count.sm { width: 28px; height: 28px; border-radius: 8px; font-size: 0.85rem; }
+.seg.debt-view { margin: 10px 0 12px; }
+.seg.small-seg { margin: 12px 0 6px; }
+.seg.small-seg button { min-height: 40px; font-size: 15px; }
+.stat-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.stat-grid.three > div { container-type: inline-size; min-width: 0; }
+.int-legend { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.int-legend li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 0.95rem; }
+.int-legend i { width: 12px; height: 12px; border-radius: 4px; background: var(--c); }
+.int-legend span { overflow-wrap: anywhere; font-weight: 600; }
+.int-legend b { font-weight: 800; }
+.min-plan { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.min-plan .mp-top { display: flex; justify-content: space-between; gap: 12px; }
+.min-plan .mp-top b { font-weight: 800; overflow-wrap: anywhere; }
+.min-plan .mp-top span { font-weight: 800; white-space: nowrap; }
+.min-plan .mp-bar { height: 8px; margin: 6px 0 4px; border-radius: 99px; background: var(--field); overflow: hidden; }
+.min-plan .mp-bar i { display: block; height: 100%; width: calc(var(--p) * 100%); border-radius: 99px; background: var(--c); }
+.min-plan .mp-bar i.stuck { background: repeating-linear-gradient(135deg, var(--red) 0 6px, color-mix(in srgb, var(--red) 40%, var(--field)) 6px 12px); }
+.min-plan small { color: var(--mute); font-weight: 600; font-size: 0.85rem; }
+.ychart .bar.cat-c1 { fill: var(--cat-c1); } .ychart .bar.cat-c2 { fill: var(--cat-c2); } .ychart .bar.cat-c3 { fill: var(--cat-c3); } .ychart .bar.cat-c4 { fill: var(--cat-c4); }
+.ychart .bar.cat-c5 { fill: var(--cat-c5); } .ychart .bar.cat-c6 { fill: var(--cat-c6); } .ychart .bar.cat-c7 { fill: var(--cat-c7); } .ychart .bar.cat-c8 { fill: var(--cat-c8); }

@@ -1,6 +1,7 @@
 import { Fragment, useState, type JSX } from 'react';
-import { cardSummary, DEBT_KINDS, debtBillId, interestSaved, isPaidOff, minimumFor, debtLabel, formatApr, isLoan, linkedBills, type DebtKind, monthlyInterestCents, parseApr, resetDebt, debtStart, groupDebts, debtItemKey, debtOrderFromItems, debtOrderWithin, type DebtItem, type CardPayment, type CardSummary, type CreditCard } from './cards';
+import { cardSummary, interestByMonth, minimumPlan, DEBT_KINDS, debtBillId, interestSaved, isPaidOff, minimumFor, debtLabel, formatApr, isLoan, linkedBills, type DebtKind, monthlyInterestCents, parseApr, resetDebt, debtStart, groupDebts, debtItemKey, debtOrderFromItems, debtOrderWithin, type DebtItem, type CardPayment, type CardSummary, type CreditCard } from './cards';
 import { formatCents, monthLabel } from './calc';
+import { monthTick, Stacked } from './charts';
 import Icon from './icons';
 import { centsToAmountInput, dayLabel, newId, ordinal, parseCents } from './money';
 import SheetBackdrop from './SheetBackdrop';
@@ -36,6 +37,7 @@ export default function Cards({ store, today }: { store: Store; today: string })
   const [menu, setMenu] = useState<CreditCard | null>(null);
   const [payingOff, setPayingOff] = useState<CardSummary | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [view, setView] = useState<'debts' | 'insights'>('debts');
   const [debtOrder, setDebtOrder] = useDebtOrder(cards);
   const { sorted: summaries, colorFor } = arrange(
     cards,
@@ -61,19 +63,19 @@ export default function Cards({ store, today }: { store: Store; today: string })
       ) : (
         <>
           {summaries.length > 1 && (
-            <div className="chips scroll-row" role="group" aria-label="Debt">
-              <button type="button" className={one ? '' : 'on'} aria-pressed={!one} onClick={() => setSel('all')}>
-                All debts
-              </button>
-              {summaries.map((s) => (
-                <button key={s.card.id} type="button" className={one?.card.id === s.card.id ? 'on' : ''} aria-pressed={one?.card.id === s.card.id} onClick={() => setSel(s.card.id)}>
-                  <CatTile category={{ name: s.card.name, color: colorFor(s.card.id) }} small />
-                  {s.card.name}
-                </button>
-              ))}
-            </div>
+            <DebtPicker summaries={summaries} value={one?.card.id ?? 'all'} colorFor={colorFor} onPick={setSel} />
           )}
-          {one ? (
+          <div className="seg debt-view" role="radiogroup" aria-label="View">
+            <button type="button" role="radio" aria-checked={view === 'debts'} className={view === 'debts' ? 'on' : ''} onClick={() => setView('debts')}>
+              {one ? 'Balance' : 'Debts'}
+            </button>
+            <button type="button" role="radio" aria-checked={view === 'insights'} className={view === 'insights' ? 'on' : ''} onClick={() => setView('insights')}>
+              Insights
+            </button>
+          </div>
+          {view === 'insights' ? (
+            <DebtInsights store={store} summaries={one ? [one] : summaries} all={summaries} colorFor={colorFor} today={today} />
+          ) : one ? (
             <CardDetail key={one.card.id} s={one} today={today} onMenu={() => setMenu(one.card)} onPay={(payment) => setPaying({ card: one.card, payment })} />
           ) : (
             <DebtList summaries={summaries} colorFor={colorFor} onReorder={setDebtOrder} onOpen={(id) => setSel(id)} onMenu={setMenu} />
@@ -148,6 +150,183 @@ function useArrange(screen: string, ids: readonly string[], ignore?: string) {
     </div>
   );
   return { drag, grid };
+}
+
+/**
+ * Which debt the tab shows: a dropdown with All debts and each debt, grouped by type (Credit cards, Auto loans …),
+ * in the debts' own order. The chosen debt's color tile sits beside it.
+ */
+function DebtPicker({ summaries, value, colorFor, onPick }: { summaries: CardSummary[]; value: string; colorFor: (id: string) => string; onPick: (id: string) => void }) {
+  const groups = DEBT_KINDS.map((k) => ({ ...k, debts: summaries.filter((s) => (s.card.kind ?? 'credit-card') === k.id) })).filter((g) => g.debts.length > 0);
+  const picked = summaries.find((s) => s.card.id === value);
+  return (
+    <label className="debt-pick">
+      <span className="sr-only">Show</span>
+      {picked ? <CatTile category={{ name: picked.card.name, color: colorFor(picked.card.id) }} small /> : <span className="group-count sm">{summaries.length}</span>}
+      <select value={value} onChange={(e) => onPick(e.target.value)}>
+        <option value="all">All debts ({formatCents(summaries.reduce((t, s) => t + Math.max(0, s.balanceNowCents), 0))})</option>
+        {groups.map((g) => (
+          <optgroup key={g.id} label={`${g.label}s`}>
+            {g.debts.map((s) => (
+              <option key={s.card.id} value={s.card.id}>
+                {s.card.name} · {formatCents(s.balanceNowCents)}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+      <Icon name="down" />
+    </label>
+  );
+}
+
+/**
+ * Debt insights: interest paid month by month (by debt, or for the one picked), and when each debt is paid off
+ * paying only its minimum, with a couple of figures worth knowing.
+ */
+function DebtInsights({ store, summaries, all, colorFor, today }: { store: Store; summaries: CardSummary[]; all: CardSummary[]; colorFor: (id: string) => string; today: string }) {
+  const [range, setRange] = useState<6 | 12 | 0>(12);
+  const year = today.slice(0, 4);
+  const ibm = interestByMonth(summaries, today);
+  const shown = range ? ibm.months.slice(-range) : ibm.months;
+  const off = ibm.months.length - shown.length;
+  const labels = shown.map((m, i) => monthTick(m, i === 0));
+  const finished = ibm.months.slice(0, -1);
+  const lastMonth = finished.length ? ibm.totals[finished.length - 1] : 0;
+  const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+  const thisYear = sum(ibm.totals.filter((_, i) => ibm.months[i].startsWith(year)));
+  const allTime = sum(ibm.totals);
+  const one = summaries.length === 1 && all.length > 1 ? summaries[0] : undefined;
+  const plan = minimumPlan(summaries.map((s) => ({ summary: s, minimumCents: minimumFor(s.card, linkedBills(s.card, store.data, today)) })), today);
+  const maxMonths = Math.max(1, ...plan.rows.map((r) => (r.payoff.kind === 'months' ? r.payoff.months : 0)));
+  const owing = summaries.filter((s) => s.balanceNowCents > 0 && !(s.card.payInFull && !s.closed));
+  const steepest = [...owing].sort((a, b) => b.card.aprBps - a.card.aprBps)[0];
+  const monthlyNow = owing.reduce((t, s) => t + monthlyInterestCents(s.balanceNowCents, s.card.aprBps), 0);
+  const limited = summaries.filter((s) => !s.loan && s.card.limitCents);
+  const used = limited.reduce((t, s) => t + Math.max(0, s.balanceNowCents), 0);
+  const limits = limited.reduce((t, s) => t + (s.card.limitCents ?? 0), 0);
+  const series = (one ? [ibm.byDebt[0]] : ibm.byDebt).map((d) => ({ name: d.name, values: d.values.slice(off), cls: `cat-${colorFor(d.id)}` }));
+
+  return (
+    <div className="cols">
+      <section className="card" aria-labelledby="int-h">
+        <h2 id="int-h">Interest paid{one ? ` on ${one.card.name}` : ''}</h2>
+        <div className="stat-grid three">
+          <div>
+            <Fig cents={lastMonth} />
+            <span>Last month</span>
+          </div>
+          <div>
+            <Fig cents={thisYear} />
+            <span>This year</span>
+          </div>
+          <div>
+            <Fig cents={allTime} />
+            <span>Since tracking</span>
+          </div>
+        </div>
+        <div className="seg small-seg" role="radiogroup" aria-label="Months shown">
+          {([6, 12, 0] as const).map((r) => (
+            <button key={r} type="button" role="radio" aria-checked={range === r} className={range === r ? 'on' : ''} onClick={() => setRange(r)}>
+              {r ? `${r} months` : 'All'}
+            </button>
+          ))}
+        </div>
+        {allTime === 0 ? (
+          <p className="empty-line">No interest charged yet. It is added when a month ends with a balance left over.</p>
+        ) : (
+          <>
+            <Stacked labels={labels} series={series} label="Interest paid each month" />
+            {!one && ibm.byDebt.length > 1 && (
+              <ul className="int-legend">
+                {ibm.byDebt
+                  .map((d) => ({ d, total: sum(d.values.slice(off)) }))
+                  .filter((x) => x.total > 0)
+                  .sort((a, b) => b.total - a.total)
+                  .map(({ d, total }) => (
+                    <li key={d.id}>
+                      <i style={{ ['--c' as string]: `var(--cat-${colorFor(d.id)})` }} aria-hidden="true" />
+                      <span>{d.name}</span>
+                      <b>{formatCents(total)}</b>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </>
+        )}
+        <p className="muted small">Interest is added when a month ends. This month's shows once it is over.</p>
+      </section>
+
+      <section className="card" aria-labelledby="min-h">
+        <h2 id="min-h">Paying only the minimums</h2>
+        {plan.rows.length === 0 ? (
+          <p className="empty-line">Nothing owed.</p>
+        ) : (
+          <>
+            <dl className="kv">
+              <dt>{one ? 'Paid off' : 'Debt-free'}</dt>
+              <dd>{plan.debtFree ? monthLabel(plan.debtFree) : 'Not at these minimums'}</dd>
+              <dt>Interest still to pay</dt>
+              <dd className="fig-neg">
+                {formatCents(plan.interestCents)}
+                {plan.stuck > 0 && <small>for the debts that get paid off</small>}
+              </dd>
+            </dl>
+            <ul className="min-plan">
+              {plan.rows.map((r) => (
+                <li key={r.id}>
+                  <div className="mp-top">
+                    <b>{r.name}</b>
+                    <span>{r.payoff.kind === 'months' ? monthLabel(r.payoff.lastMonth) : r.minimumCents ? 'Never' : 'No minimum'}</span>
+                  </div>
+                  <div className="mp-bar" aria-hidden="true">
+                    <i style={{ ['--p' as string]: r.payoff.kind === 'months' ? r.payoff.months / maxMonths : 1, ['--c' as string]: `var(--cat-${colorFor(r.id)})` }} className={r.payoff.kind === 'months' ? '' : 'stuck'} />
+                  </div>
+                  <small>
+                    {formatCents(r.balanceCents)} at {formatApr(r.aprBps)}
+                    {r.minimumCents ? `, ${formatCents(r.minimumCents)} a month` : ''}
+                    {r.payoff.kind === 'months'
+                      ? ` · ${r.payoff.months} ${r.payoff.months === 1 ? 'payment' : 'payments'}, ${formatCents(r.payoff.interestCents)} interest`
+                      : r.minimumCents
+                        ? " · the minimum doesn't cover the interest"
+                        : ' · set a minimum to see a date'}
+                  </small>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+
+      {owing.length > 0 && (
+        <section className="card" aria-labelledby="know-h">
+          <h2 id="know-h">Good to know</h2>
+          <dl className="kv">
+            <dt>Interest a month at today's balances</dt>
+            <dd>{formatCents(monthlyNow)}</dd>
+            {!one && steepest && owing.length > 1 && (
+              <>
+                <dt>Extra money goes furthest on</dt>
+                <dd>
+                  {steepest.card.name}
+                  <small>{formatApr(steepest.card.aprBps)} APR, the highest</small>
+                </dd>
+              </>
+            )}
+            {limits > 0 && (
+              <>
+                <dt>Credit limit used</dt>
+                <dd className={used / limits > 0.3 ? 'fig-neg' : ''}>
+                  {Math.round((used / limits) * 100)}%<small>{formatCents(used)} of {formatCents(limits)}</small>
+                </dd>
+              </>
+            )}
+          </dl>
+          <p className="muted small">Try paying a debt down or more each month in the Simulator to see the interest you'd save.</p>
+        </section>
+      )}
+    </div>
+  );
 }
 
 /** One debt in the Debt tab's list: balance, minimum, APR and due date, opening on tap, with a ⋮. */

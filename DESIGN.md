@@ -27,7 +27,7 @@ Rules: red always means over and is never decorative; an over meter is striped r
 
 ### The pass (signature)
 
-Every `.hero` card (Budget left, Saved in the year, Owed on all debts, a debt's balance, Analytics' headline stats) is the pass: sunflower ground, `--on-gold` ink for every figure and label, a 12px ink magnetic stripe 14px from the top edge, and its meter in ink on a darker sunflower track. Over budget, the pass turns solid red and keeps its stripe.
+Every `.hero` card (Budget left, Saved in the year, Owed on all debts, a debt's balance, the Simulator's cash at the end, and the Simulator's results popup) is the pass: sunflower ground, `--on-gold` ink for every figure and label, a 12px ink magnetic stripe 14px from the top edge, and its meter in ink on a darker sunflower track. Over budget, the pass turns solid red and keeps its stripe.
 
 ## Typography
 
@@ -43,13 +43,13 @@ Radii: hero 28px, card 22px, row 16px, control 14px, pills 999px. Cards are flat
 
 ## Components
 
-- **Band**: solid `--shell` cobalt edge to edge, white text, translucent white round buttons. On Overview and Purchases, a month or year stepper (‹ title ›) with "This month"; on Analytics, Debt and Setup, which don't follow the period, the tab's name in the same place. The visible page title below the band is only on Purchases (with its + button).
+- **Band**: solid `--shell` cobalt edge to edge, white text, translucent white round buttons. On Overview and Purchases, a month or year stepper (‹ title ›) with "This month"; on Simulator, Debt and Setup, which don't follow the period, the tab's name in the same place. The visible page title below the band is only on Purchases (with its + button).
 - **Hero card (the pass)**: Budget left with meter and three figures, printed on the sunflower pass (see Colors); turns solid red when over.
 - **Meter**: 12px track (a faint cobalt tint, so the empty part never reads as a second value), `--fill` cobalt, red stripes when over; ink on the pass.
 - **Bills checklist**: 30px checkbox (cobalt when paid, dashed when ended), name, status line, amount, ⋮ for date and amount paid.
 - **Category row**: tile, name with "spent of budget", left or over, slim meter.
 - **Chips**: category tiles, payment methods and periods; picked chip is cobalt.
-- **Segmented control** (`.seg`): a tinted track with a raised card-colored pill for the choice. Used for switching views or sections (Analytics sections, Month / Year, Appearance), never for picking data, so it stays distinct from chips.
+- **Segmented control** (`.seg`): a tinted track with a raised card-colored pill for the choice. Used for switching views or sections (Debts / Insights, Month / Year, Simulator's look-ahead, Appearance), never for picking data, so it stays distinct from chips.
 - **Sheets**: rise from the bottom; end in "Save changes" / "Discard changes"; destructive steps confirm.
 - **Tab bar**: floating cobalt `--shell` pill; tabs in translucent white, the picked tab punched out in sunflower with ink label and icon.
 - **Undo toast**: ink panel above the tab bar for about 7 seconds.

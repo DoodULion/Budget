@@ -544,3 +544,42 @@ export function debtBill(debt: CreditCard, existing?: Bill, today: DateKey = tod
 
 /** The name of this line on Month. */
 export const PAYOFF_NAME = 'Credit Card payoff';
+
+/** Interest added each month on each debt, from the earliest start through today's month (finished months only post interest). */
+export function interestByMonth(summaries: CardSummary[], today: DateKey): { months: MonthKey[]; byDebt: { id: string; name: string; values: Cents[] }[]; totals: Cents[] } {
+  if (summaries.length === 0) return { months: [], byDebt: [], totals: [] };
+  const first = summaries.map((s) => s.startMonth).sort()[0];
+  const months = monthRange(first, monthOf(today));
+  const byDebt = summaries.map((s) => ({ id: s.card.id, name: s.card.name, values: months.map((m) => s.rows.find((r) => r.month === m)?.interestCents ?? 0) }));
+  return { months, byDebt, totals: months.map((_, i) => byDebt.reduce((t, d) => t + d.values[i], 0)) };
+}
+
+export interface MinimumPlanRow {
+  id: string;
+  name: string;
+  balanceCents: Cents;
+  minimumCents?: Cents;
+  aprBps: number;
+  payoff: Payoff;
+}
+
+/**
+ * Paying only the minimum on every debt from this month: when each is paid off and the interest it adds on the way.
+ * Debts owing nothing and cards paid in full each month are left out. Sorted by when they are paid off (never last).
+ */
+export function minimumPlan(debts: { summary: CardSummary; minimumCents?: Cents }[], today: DateKey): { rows: MinimumPlanRow[]; debtFree?: MonthKey; interestCents: Cents; stuck: number } {
+  const now = monthOf(today);
+  const rows = debts
+    .filter(({ summary: s }) => s.balanceNowCents > 0 && !(s.card.payInFull && !s.closed))
+    .map(({ summary: s, minimumCents }) => ({ id: s.card.id, name: s.card.name, balanceCents: s.balanceNowCents, minimumCents, aprBps: s.card.aprBps, payoff: payoff(s.balanceNowCents, s.card.aprBps, minimumCents, now) }));
+  const key = (r: MinimumPlanRow) => (r.payoff.kind === 'months' ? r.payoff.lastMonth : '9999-99');
+  rows.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
+  const stuck = rows.filter((r) => r.payoff.kind !== 'months').length;
+  const last = rows.at(-1);
+  return {
+    rows,
+    debtFree: stuck === 0 && last?.payoff.kind === 'months' ? last.payoff.lastMonth : undefined,
+    interestCents: rows.reduce((t, r) => t + (r.payoff.kind === 'months' ? r.payoff.interestCents : 0), 0),
+    stuck,
+  };
+}

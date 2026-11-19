@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Month, Purchase } from './calc';
 import { autopayMonths, type Data } from './calc';
-import { cardMonths, cardSummary, debtBill, debtBillChanges, groupDebtBills, sortBillItems, interestSaved, isPaidOff, minimumFor, paidOffIds, debtLabel, formatApr, isLoan, linkedBills, parseApr, payoff, payoffForMonth, projection, resetDebt, debtStart, totalSeries, groupDebts, debtItemKey, debtOrderFromItems, debtOrderWithin, type CreditCard } from './cards';
+import { cardMonths, cardSummary, debtBill, debtBillChanges, groupDebtBills, sortBillItems, interestSaved, isPaidOff, minimumFor, paidOffIds, debtLabel, formatApr, isLoan, linkedBills, parseApr, payoff, payoffForMonth, projection, resetDebt, debtStart, totalSeries, interestByMonth, minimumPlan, groupDebts, debtItemKey, debtOrderFromItems, debtOrderWithin, type CreditCard } from './cards';
 
 // Made-up figures only.
 const card: CreditCard = {
@@ -492,5 +492,28 @@ describe('due-date autopay before the first tracked month', () => {
     const d: Data = { settings: { firstMonth: '2027-03' } as Data['settings'], bills: [bill], cards: [loan], categories: [], months: [], purchases: [] };
     expect(autopayMonths(d, '2027-02-20')).toEqual([]);
     expect(autopayMonths(d, '2027-03-15').map((m) => m.month)).toEqual(['2027-03']);
+  });
+});
+
+describe('debt insights', () => {
+  // The Test Visa (Jan interest $14.00, Feb none) and the made-up Car loan (Jan $48.50, Feb $48.74), today 2027-03-15.
+  const loan: CreditCard = { id: 'car', kind: 'auto-loan', name: 'Car loan', aprBps: 600, startBalanceCents: 1_000_000, startMonth: '2027-01', minPaymentCents: 30_000, payments: [{ id: 'x', date: '2027-01-10', amountCents: 30_000 }] };
+  const visa = cardSummary(card, purchases, today);
+  const car = cardSummary(loan, purchases, today);
+  it('adds up the interest by month, per debt and in total', () => {
+    const r = interestByMonth([visa, car], today);
+    expect(r.months).toEqual(['2027-01', '2027-02', '2027-03']);
+    expect(r.byDebt.map((d) => d.values)).toEqual([[1_400, 0, 0], [4_850, 4_874, 0]]);
+    expect(r.totals).toEqual([6_250, 4_874, 0]);
+  });
+  it('shows when each debt is paid off at its minimum, and when all are', () => {
+    const plan = minimumPlan([{ summary: visa, minimumCents: 5_000 }, { summary: car, minimumCents: 30_000 }], today);
+    expect(plan.rows.map((r) => r.name)).toEqual(['Test Visa', 'Car loan']);
+    expect(plan.rows[0].payoff).toEqual({ kind: 'months', months: 3, lastMonth: '2027-05', interestCents: 264 });
+    expect(plan.debtFree).toBe(plan.rows[1].payoff.kind === 'months' ? plan.rows[1].payoff.lastMonth : 'x');
+    expect(plan.stuck).toBe(0);
+    const none = minimumPlan([{ summary: visa }, { summary: car, minimumCents: 30_000 }], today);
+    expect(none.rows.at(-1)!.name).toBe('Test Visa'); // no minimum: never, listed last
+    expect(none).toMatchObject({ debtFree: undefined, stuck: 1 });
   });
 });
