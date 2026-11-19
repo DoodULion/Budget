@@ -2,7 +2,6 @@
  * JSON backup (everything) and CSV export (purchases). Pure functions; saving the file is in download.ts.
  * Backups hold personal figures: they are exported to the phone, never committed to the repo.
  */
-import { isCustomChart } from './analytics';
 import type { CreditCard } from './cards';
 import { formatCents, monthOf, type Bill, type Category, type Data, type Month, type Purchase, type Settings } from './calc';
 
@@ -44,8 +43,7 @@ function checkSettings(s: unknown): Settings {
     !isMonth(s.firstMonth) ||
     !Array.isArray(s.paidWith) ||
     !s.paidWith.every(isStr) ||
-    typeof s.setupDone !== 'boolean' ||
-    (s.customCharts !== undefined && (!Array.isArray(s.customCharts) || !s.customCharts.every(isCustomChart)))
+    typeof s.setupDone !== 'boolean'
   )
     fail('settings');
   return s as unknown as Settings;
@@ -94,6 +92,7 @@ export function parseBackup(text: string): Data {
         (c.dueDay === undefined || (Number.isInteger(c.dueDay) && (c.dueDay as number) >= 1 && (c.dueDay as number) <= 31)) &&
         (c.paidOffDate === undefined || isDate(c.paidOffDate)) &&
         optInt(c.interestSavedCents) &&
+        (c.resetDate === undefined || isDate(c.resetDate)) &&
         Array.isArray(c.payments) &&
         c.payments.every((p) => isObj(p) && isStr(p.id) && isDate(p.date) && isInt(p.amountCents)),
     ),

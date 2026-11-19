@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Month, Purchase } from './calc';
 import { autopayMonths, type Data } from './calc';
-import { cardMonths, cardSummary, debtBill, debtBillChanges, groupDebtBills, sortBillItems, interestSaved, isPaidOff, minimumFor, paidOffIds, debtLabel, formatApr, isLoan, linkedBills, parseApr, payoff, payoffForMonth, projection, totalSeries, type CreditCard } from './cards';
+import { cardMonths, cardSummary, debtBill, debtBillChanges, groupDebtBills, sortBillItems, interestSaved, isPaidOff, minimumFor, paidOffIds, debtLabel, formatApr, isLoan, linkedBills, parseApr, payoff, payoffForMonth, projection, resetDebt, debtStart, totalSeries, interestByMonth, minimumPlan, groupDebts, debtItemKey, debtOrderFromItems, debtOrderWithin, type CreditCard } from './cards';
 
 // Made-up figures only.
 const card: CreditCard = {
@@ -388,5 +388,132 @@ describe('sorting the bills', () => {
   });
   it('puts unpaid first, then paid, then ended, keeping the order within each', () => {
     expect(names('status')).toEqual(['Credit cards[pa,pb]', 'phone', 'rent', 'gym']);
+  });
+});
+
+describe('resetting balances', () => {
+  // Made-up: the Test Visa above, reset to $500.00 owed on 2027-03-10 (today 2027-03-15).
+  const reset = resetDebt(card, 50_000, '2027-03-10');
+  it('keeps everything but the balance', () => {
+    expect(reset).toMatchObject({ aprBps: 2400, limitCents: 500_000, plannedPaymentCents: 5_000, startBalanceCents: 50_000, startMonth: '2027-03', resetDate: '2027-03-10', payments: [] });
+  });
+  it('starts the months over at the new balance, leaving out purchases up to the reset day', () => {
+    const rows = cardMonths(reset, [...purchases, buy('g', '2027-03-12', 2_500)], today);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ month: '2027-03', openingCents: 50_000, chargesCents: 2_500, paymentsCents: 0, closingCents: 52_500 });
+  });
+  it('counts payments after the reset day, including from a linked bill', () => {
+    const later = { ...reset, payments: [{ id: 'x', date: '2027-03-14', amountCents: 10_000 }] };
+    const extra = [{ id: 'b1', date: '2027-03-05', amountCents: 9_999 }, { id: 'b2', date: '2027-03-11', amountCents: 5_000 }];
+    expect(cardMonths(later, purchases, today, extra)[0]).toMatchObject({ paymentsCents: 15_000, closingCents: 35_000 });
+  });
+  it('clears a payoff when the debt owes again, and a loan reset to zero is paid off', () => {
+    expect(resetDebt({ ...card, paidOffDate: '2027-02-01', interestSavedCents: 264 }, 10_000, '2027-03-10')).not.toHaveProperty('paidOffDate');
+    const loan: CreditCard = { id: 'l', kind: 'auto-loan', name: 'Car loan', aprBps: 600, startBalanceCents: 1_000_000, startMonth: '2027-01', minPaymentCents: 30_000, payments: [] };
+    const zero = resetDebt(loan, 0, '2027-03-10');
+    expect(zero.paidOffDate).toBe('2027-03-10');
+    expect(isPaidOff(zero, cardSummary(zero, [], today))).toBe(true);
+    expect(isPaidOff(resetDebt(card, 0, '2027-03-10'), cardSummary(resetDebt(card, 0, '2027-03-10'), [], today))).toBe(false);
+  });
+});
+
+describe('resetting a closed card with a due date', () => {
+  // Made-up: a closed card with a $50.00 minimum due on the 15th, autopaid since 2027-01.
+  const closed: CreditCard = { id: 'old', name: 'Old Card', aprBps: 2400, startBalanceCents: 100_000, startMonth: '2027-01', closedMonth: '2027-01', minPaymentCents: 5_000, dueDay: 15, payments: [] };
+  const bill = debtBill(closed, undefined, '2027-01-02')!;
+  const data = (card: CreditCard): Data => ({ settings: { firstMonth: '2027-01' } as Data['settings'], bills: [bill], cards: [card], categories: [], months: [], purchases: [] });
+  const marchRow = (card: CreditCard, today: string) => {
+    const months = autopayMonths(data(card), today);
+    const linked = linkedBills(card, { bills: [bill], months }, today);
+    return cardSummary(card, [], today, linked).rows.at(-1)!;
+  };
+  it("doesn't count the month's payment again when the reset is after the due day", () => {
+    const reset = resetDebt(closed, 80_000, '2027-03-20');
+    expect(marchRow(reset, '2027-03-25')).toMatchObject({ month: '2027-03', openingCents: 80_000, paymentsCents: 0, closingCents: 80_000 });
+  });
+  it('counts it when the reset is before the due day', () => {
+    const reset = resetDebt(closed, 80_000, '2027-03-10');
+    expect(marchRow(reset, '2027-03-14')).toMatchObject({ paymentsCents: 0, closingCents: 80_000 }); // not due yet
+    expect(marchRow(reset, '2027-03-25')).toMatchObject({ openingCents: 80_000, paymentsCents: 5_000, closingCents: 75_000 });
+  });
+  it('treats a reset on the due day itself as already including that payment', () => {
+    expect(marchRow(resetDebt(closed, 80_000, '2027-03-15'), '2027-03-25')).toMatchObject({ paymentsCents: 0, closingCents: 80_000 });
+  });
+  it('keeps counting the next months as usual', () => {
+    const reset = resetDebt(closed, 80_000, '2027-03-20');
+    const s = cardSummary(reset, [], '2027-04-20', linkedBills(reset, { bills: [bill], months: autopayMonths(data(reset), '2027-04-20') }, '2027-04-20'));
+    expect(s.rows.map((r) => [r.month, r.paymentsCents])).toEqual([['2027-03', 0], ['2027-04', 5_000]]);
+  });
+});
+
+describe('combining debts of the same type on the Debt tab', () => {
+  // Made-up: two credit cards, an auto loan and a third credit card, in that order.
+  const mk = (id: string, kind: CreditCard['kind'], start: number, min?: number, extra: Partial<CreditCard> = {}): CreditCard => ({ id, kind, name: id, aprBps: 2400, startBalanceCents: start, startMonth: '2027-03', minPaymentCents: min, payments: [], ...extra });
+  const debts = [mk('A Visa', undefined, 50_000, 2_500), mk('B Card', 'credit-card', 20_000, 1_000), mk('Car', 'auto-loan', 1_000_000, 30_000), mk('C Card', undefined, 0, 4_000, { paidOffDate: '2027-03-01' })];
+  const items = groupDebts(debts.map((c) => cardSummary(c, [], today)));
+  it('makes one group per type with two or more debts, where its first debt was', () => {
+    expect(items.map(debtItemKey)).toEqual(['group:credit-card', 'Car']);
+    const g = items[0];
+    expect(g).toMatchObject({ kind: 'group', label: 'Credit cards', balanceCents: 70_000, minimumsCents: 3_500 }); // the paid-off card's minimum is left out
+    if (g.kind === 'group') expect(g.debts.map((s) => s.card.id)).toEqual(['A Visa', 'B Card', 'C Card']);
+  });
+  it('keeps a lone debt of its type as a plain row', () => {
+    expect(groupDebts(debts.slice(1, 3).map((c) => cardSummary(c, [], today))).map((it) => it.kind)).toEqual(['debt', 'debt']);
+  });
+  it('moves a group’s debts together, and reorders inside a group in its own slots', () => {
+    expect(debtOrderFromItems(['Car', 'group:credit-card'], items)).toEqual(['Car', 'A Visa', 'B Card', 'C Card']);
+    expect(debtOrderWithin(['A Visa', 'Car', 'B Card', 'C Card'], ['C Card', 'A Visa', 'B Card'])).toEqual(['C Card', 'Car', 'A Visa', 'B Card']);
+  });
+});
+
+describe('nothing before the first tracked month', () => {
+  // Made-up: the Test Visa starts 2027-01, but tracking starts 2027-02.
+  it('starts a debt that began earlier at its starting balance in the first month', () => {
+    expect(debtStart(card, '2027-02')).toBe('2027-02');
+    expect(debtStart(card, '2026-12')).toBe('2027-01');
+    const rows = cardMonths(card, purchases, today, [], '2027-02');
+    expect(rows.map((r) => r.month)).toEqual(['2027-02', '2027-03']);
+    expect(rows[0]).toMatchObject({ openingCents: 100_000, chargesCents: 10_000, paymentsCents: 96_400, interestCents: 72 }); // Jan's charges and payment are not counted
+    expect(cardSummary(card, purchases, today, undefined, '2027-02').startMonth).toBe('2027-02');
+  });
+  it('records nothing while the first month is still ahead', () => {
+    expect(cardMonths(card, purchases, '2027-01-20', [], '2027-02')).toEqual([]);
+    expect(cardSummary(card, purchases, '2027-01-20', undefined, '2027-02').balanceNowCents).toBe(100_000);
+  });
+  it('resets a debt to start in the first month when it is still ahead', () => {
+    expect(resetDebt(card, 40_000, '2027-01-20', '2027-02')).toMatchObject({ startMonth: '2027-02', startBalanceCents: 40_000 });
+  });
+});
+
+describe('due-date autopay before the first tracked month', () => {
+  it('records nothing until the first month, then only from it', () => {
+    const loan: CreditCard = { id: 'car', kind: 'auto-loan', name: 'Car loan', aprBps: 600, startBalanceCents: 1_000_000, startMonth: '2027-01', minPaymentCents: 30_000, dueDay: 15, payments: [] };
+    const bill = debtBill(loan, undefined, '2027-01-02')!; // autopay since 2027-01
+    const d: Data = { settings: { firstMonth: '2027-03' } as Data['settings'], bills: [bill], cards: [loan], categories: [], months: [], purchases: [] };
+    expect(autopayMonths(d, '2027-02-20')).toEqual([]);
+    expect(autopayMonths(d, '2027-03-15').map((m) => m.month)).toEqual(['2027-03']);
+  });
+});
+
+describe('debt insights', () => {
+  // The Test Visa (Jan interest $14.00, Feb none) and the made-up Car loan (Jan $48.50, Feb $48.74), today 2027-03-15.
+  const loan: CreditCard = { id: 'car', kind: 'auto-loan', name: 'Car loan', aprBps: 600, startBalanceCents: 1_000_000, startMonth: '2027-01', minPaymentCents: 30_000, payments: [{ id: 'x', date: '2027-01-10', amountCents: 30_000 }] };
+  const visa = cardSummary(card, purchases, today);
+  const car = cardSummary(loan, purchases, today);
+  it('adds up the interest by month, per debt and in total', () => {
+    const r = interestByMonth([visa, car], today);
+    expect(r.months).toEqual(['2027-01', '2027-02', '2027-03']);
+    expect(r.byDebt.map((d) => d.values)).toEqual([[1_400, 0, 0], [4_850, 4_874, 0]]);
+    expect(r.totals).toEqual([6_250, 4_874, 0]);
+  });
+  it('shows when each debt is paid off at its minimum, and when all are', () => {
+    const plan = minimumPlan([{ summary: visa, minimumCents: 5_000 }, { summary: car, minimumCents: 30_000 }], today);
+    expect(plan.rows.map((r) => r.name)).toEqual(['Test Visa', 'Car loan']);
+    expect(plan.rows[0].payoff).toEqual({ kind: 'months', months: 3, lastMonth: '2027-05', interestCents: 264 });
+    expect(plan.debtFree).toBe(plan.rows[1].payoff.kind === 'months' ? plan.rows[1].payoff.lastMonth : 'x');
+    expect(plan.stuck).toBe(0);
+    const none = minimumPlan([{ summary: visa }, { summary: car, minimumCents: 30_000 }], today);
+    expect(none.rows.at(-1)!.name).toBe('Test Visa'); // no minimum: never, listed last
+    expect(none).toMatchObject({ debtFree: undefined, stuck: 1 });
   });
 });

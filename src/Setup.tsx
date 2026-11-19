@@ -258,7 +258,7 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Rent" autoComplete="off" disabled={fromDebt} />
         </label>
         <label className="field">
-          <span>Each month</span>
+          <span>Amount each month</span>
           <MoneyInput value={amount} onValue={setAmount} placeholder="0.00" disabled={fromDebt} />
         </label>
         <label className="field">
@@ -506,7 +506,7 @@ export function CategorySheet({
           <div className="chips" role="radiogroup" aria-label="Category color">
             {CATEGORY_COLORS.map((k) => (
               <button key={k} type="button" role="radio" aria-checked={color === k} aria-label={`Color ${k.slice(1)}`} className={color === k ? 'on' : ''} onClick={() => setColor(k)}>
-                <CatTile category={{ name: name || '?', color: k }} small />
+                <CatTile category={{ name: name || '•', color: k }} small />
               </button>
             ))}
           </div>

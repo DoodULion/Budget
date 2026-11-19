@@ -12,6 +12,7 @@ const PATHS = {
       <path d="M3 10h18M7 15h4" />
     </>
   ),
+  sim: <path d="M4 19h16M5 15l4-4 3 3 4-5" />,
   year: <path d="M4 19h16M6 16V11M10 16V8M14 16v-5M18 16V5" />,
   setup: (
     <>

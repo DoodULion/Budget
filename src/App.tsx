@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import Analytics from './Analytics';
 import Cards from './Cards';
 import { debtBillChanges, paidOffIds } from './cards';
 import { addMonths, autopayMonths, monthLabel, thisMonth, type MonthKey } from './calc';
@@ -8,15 +7,16 @@ import Month from './Month';
 import PeriodSheet, { type Period } from './PeriodSheet';
 import Purchases from './Purchases';
 import Setup from './Setup';
+import Simulator from './Simulator';
 import { useStore, type Store } from './store';
 import { UndoProvider } from './undo';
 import { useToday } from './useToday';
 import Year from './Year';
 
-type Tab = 'analytics' | 'cards' | 'summary' | 'purchases' | 'setup';
+type Tab = 'simulator' | 'cards' | 'summary' | 'purchases' | 'setup';
 
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
-  { id: 'analytics', label: 'Analytics', icon: 'year' },
+  { id: 'simulator', label: 'Simulator', icon: 'sim' },
   { id: 'cards', label: 'Debt', icon: 'card' },
   { id: 'summary', label: 'Overview', icon: 'month' },
   { id: 'purchases', label: 'Purchases', icon: 'entries' },
@@ -117,7 +117,7 @@ function Main({ store, today }: { store: Store; today: string }) {
       />
     );
   } else {
-    // Analytics, Debt and Setup don't follow the period, so their band names the tab instead of a month.
+    // Simulator, Debt and Setup don't follow the period, so their band names the tab instead of a month.
     band = <p className="band-title center band-name">{TABS.find((t) => t.id === tab)!.label}</p>;
   }
 
@@ -137,8 +137,8 @@ function Main({ store, today }: { store: Store; today: string }) {
               )
             ) : tab === 'cards' ? (
               <Cards store={store} today={today} />
-            ) : tab === 'analytics' ? (
-              <Analytics store={store} today={today} />
+            ) : tab === 'simulator' ? (
+              <Simulator store={store} today={today} />
             ) : tab === 'purchases' ? (
               <Purchases store={store} month={month} today={today} />
             ) : (
