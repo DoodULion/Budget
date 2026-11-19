@@ -36,7 +36,8 @@ All data stays on the device in IndexedDB. No accounts, no backend and no networ
 - Inputs: 16px or larger text, `inputmode="decimal"` for dollar amounts, thousands commas shown as you type (`4,000`) and ignored when read. Tap targets at least 44px. No field is ever focused automatically.
 - One column on a normal phone, two columns from about 700px (unfolded foldable).
 - Light mode by default; Dark or System in App settings (a per-device preference).
-- Look and feel follow Trip Tracker's `DESIGN.md` (system rounded font, cards, sheets, meters where red always means "over"), with the app's own main color.
+- **Styling** follows Trip Tracker's `DESIGN.md`: system rounded font, type scale, spacing, card and sheet shapes, tab bar, category tiles, meters where red always means "over" and green "under", hold-and-drag, Undo toast.
+- **Theme is its own**, so the two apps never look alike side by side: cool slate neutrals in place of Trip Tracker's warm stone (light background about `#eef1f5`, cards white, ink about `#1e2733`; dark background about `#141922`), a deep navy main color (about `#1f3a5f`; a lighter navy in dark mode) with a teal accent (about `#0f7c86`), and its own Home Screen icon. Over-red and under-green keep their meaning but are tuned for contrast on the new neutrals and must stay clearly different from the main and accent colors. The app gets its own `DESIGN.md` recording these tokens; exact values are settled while building the screens.
 
 ## Data model
 
