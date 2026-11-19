@@ -17,6 +17,7 @@ import {
 } from './calc';
 import { saveFile } from './download';
 import Icon from './icons';
+import { isDebtBill } from './cards';
 import { centsToAmountInput, newId, parseCents, todayLocal } from './money';
 import SheetBackdrop from './SheetBackdrop';
 import type { Store } from './store';
@@ -175,6 +176,9 @@ function BillsCard({ store, step }: { store: Store; step?: number }) {
 }
 
 function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; onClose: () => void }) {
+  // A bill made from a debt's minimum payment: its name, amount and card come from the debt (Debt tab).
+  const fromDebt = !!bill && isDebtBill(bill);
+  const debt = fromDebt ? store.data.cards.find((c) => c.id === bill.cardId) : undefined;
   const [name, setName] = useState(bill?.name ?? '');
   const [amount, setAmount] = useState(bill ? centsToAmountInput(bill.amountCents) : '');
   const [ends, setEnds] = useState(bill?.lastMonth ?? '');
@@ -247,13 +251,14 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
         }}
       >
         <h2 id="bill-edit-h">{bill ? 'Edit bill' : 'Add a bill'}</h2>
+        {fromDebt && <p className="muted small">This is the minimum payment of {debt?.name ?? 'a debt'}. Change its name or amount on the Debt tab. Autopay, last payment and note can be set here.</p>}
         <label className="field">
           <span>Name</span>
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Rent" autoComplete="off" />
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Rent" autoComplete="off" disabled={fromDebt} />
         </label>
         <label className="field">
           <span>Each month</span>
-          <MoneyInput value={amount} onValue={setAmount} placeholder="0.00" />
+          <MoneyInput value={amount} onValue={setAmount} placeholder="0.00" disabled={fromDebt} />
         </label>
         <label className="field">
           <span>Last payment (optional)</span>
@@ -278,10 +283,10 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
             </label>
           </div>
         )}
-        {store.data.cards.length > 0 && (
+        {store.data.cards.length > 0 && !fromDebt && (
           <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
-            <span>Pays a credit card (optional)</span>
-            <div className="chips scroll-row" role="radiogroup" aria-label="Credit card this bill pays">
+            <span>Pays a debt (optional)</span>
+            <div className="chips scroll-row" role="radiogroup" aria-label="Debt this bill pays">
               <button type="button" role="radio" aria-checked={cardId === ''} className={cardId === '' ? 'on' : ''} onClick={() => setCardId('')}>
                 None
               </button>
@@ -291,7 +296,7 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
                 </button>
               ))}
             </div>
-            <p className="muted small">When you mark this bill paid, the payment is recorded on that card automatically.</p>
+            <p className="muted small">When you mark this bill paid, the payment is recorded on that debt automatically.</p>
           </fieldset>
         )}
         <label className="field">
@@ -304,7 +309,7 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
           <button type="submit" className="primary">
             {bill ? 'Save changes' : 'Add bill'}
           </button>
-          {bill && (
+          {bill && !fromDebt && (
             <button type="button" className="danger" onClick={() => setConfirm(true)}>
               Remove bill
             </button>

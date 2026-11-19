@@ -17,7 +17,7 @@ import {
   type Purchase,
   type Settings,
 } from './calc';
-import type { CreditCard } from './cards';
+import { debtBill, debtBillId, isLoan, type CreditCard } from './cards';
 import * as db from './db';
 import { newId, todayLocal } from './money';
 
@@ -101,12 +101,16 @@ export function useStore(): AppState {
       },
       async saveCard(card: CreditCard, oldName?: string) {
         let settings: Settings | undefined;
+        let bill: Bill | undefined;
+        let dropBill: string | undefined;
         const retagged: Purchase[] = [];
         update((d) => {
-          const renamed = oldName !== undefined && oldName !== card.name;
+          // Only credit cards are Paid with names; a loan has none.
+          const tagged = !isLoan(card);
+          const renamed = tagged && oldName !== undefined && oldName !== card.name;
           let paidWith = d.settings.paidWith;
           if (renamed) paidWith = paidWith.includes(card.name) ? paidWith.filter((m) => m !== oldName) : paidWith.map((m) => (m === oldName ? card.name : m));
-          if (!paidWith.includes(card.name)) paidWith = [...paidWith, card.name];
+          if (tagged && !paidWith.includes(card.name)) paidWith = [...paidWith, card.name];
           settings = paidWith === d.settings.paidWith ? undefined : { ...d.settings, paidWith };
           retagged.length = 0;
           const purchases = renamed
@@ -117,25 +121,60 @@ export function useStore(): AppState {
                 return q;
               })
             : d.purchases;
+          // The minimum payment is a fixed bill, kept in step with the debt.
+          const existing = d.bills.find((b) => b.id === debtBillId(card.id));
+          bill = debtBill(card, existing && !existing.deleted ? existing : undefined);
+          dropBill = !bill && existing ? existing.id : undefined;
+          const paidSomewhere = !!dropBill && d.months.some((m) => m.payments[dropBill!]);
+          let bills = d.bills;
+          if (bill) bills = existing ? bills.map((b) => (b.id === bill!.id ? bill! : b)) : [...bills, bill];
+          else if (dropBill) bills = paidSomewhere ? bills.map((b) => (b.id === dropBill ? { ...b, deleted: true } : b)) : bills.filter((b) => b.id !== dropBill);
+          if (dropBill && paidSomewhere) {
+            bill = { ...existing!, deleted: true };
+            dropBill = undefined;
+          }
           return {
             ...d,
             settings: settings ?? d.settings,
             purchases,
+            bills,
             cards: d.cards.some((c) => c.id === card.id) ? d.cards.map((c) => (c.id === card.id ? card : c)) : [...d.cards, card],
           };
         });
         await db.putCard(card);
         if (settings) await db.saveSettings(settings);
+        if (bill) await db.putBill(bill);
+        if (dropBill) await db.deleteBill(dropBill);
         await Promise.all(retagged.map(db.putPurchase));
+      },
+      async removeCard(id: string) {
+        let bill: Bill | undefined;
+        let dropBill: string | undefined;
+        update((d) => {
+          const existing = d.bills.find((b) => b.id === debtBillId(id));
+          const paidSomewhere = !!existing && d.months.some((m) => m.payments[existing.id]);
+          bill = existing && paidSomewhere ? { ...existing, deleted: true } : undefined;
+          dropBill = existing && !paidSomewhere ? existing.id : undefined;
+          return {
+            ...d,
+            cards: d.cards.filter((c) => c.id !== id),
+            bills: bill ? d.bills.map((b) => (b.id === bill!.id ? bill! : b)) : dropBill ? d.bills.filter((b) => b.id !== dropBill) : d.bills,
+          };
+        });
+        await db.deleteCard(id);
+        if (bill) await db.putBill(bill);
+        if (dropBill) await db.deleteBill(dropBill);
       },
       async renamePaidWith(oldName: string, newName: string) {
         if (oldName === newName) return;
         let settings: Settings | undefined;
         let card: CreditCard | undefined;
+        let renamedBill: Bill | undefined;
         const retagged: Purchase[] = [];
         update((d) => {
           retagged.length = 0;
           card = undefined;
+          renamedBill = undefined;
           settings = { ...d.settings, paidWith: d.settings.paidWith.map((m) => (m === oldName ? newName : m)) };
           const purchases = d.purchases.map((p) => {
             if (p.paidWith !== oldName) return p;
@@ -148,15 +187,18 @@ export function useStore(): AppState {
             card = { ...c, name: newName };
             return card;
           });
-          return { ...d, settings, purchases, cards };
+          const bills = d.bills.map((b) => {
+            if (!card || b.id !== debtBillId(card.id) || b.deleted) return b;
+            const q = { ...b, name: `${newName} payment` };
+            renamedBill = q;
+            return q;
+          });
+          return { ...d, settings, purchases, cards, bills };
         });
         if (settings) await db.saveSettings(settings);
         if (card) await db.putCard(card);
+        if (renamedBill) await db.putBill(renamedBill);
         await Promise.all(retagged.map(db.putPurchase));
-      },
-      async removeCard(id: string) {
-        update((d) => ({ ...d, cards: d.cards.filter((c) => c.id !== id) }));
-        await db.deleteCard(id);
       },
       async putCategory(category: Category) {
         update((d) => ({

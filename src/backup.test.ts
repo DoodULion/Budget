@@ -38,6 +38,7 @@ describe('JSON backup', () => {
     d.cards = [
       { id: 'v', name: 'Card A', aprBps: 2499, startBalanceCents: 100_000, startMonth: '2027-01', limitCents: 500_000, plannedPaymentCents: 5_000, payments: [{ id: 'p', date: '2027-02-01', amountCents: 2_500 }] },
     ];
+    d.cards.push({ id: 'car', kind: 'auto-loan', name: 'Car loan', aprBps: 600, startBalanceCents: 1_000_000, startMonth: '2027-01', minPaymentCents: 30_000, payments: [] });
     expect(parseBackup(toBackup(d))).toEqual(d);
   });
 

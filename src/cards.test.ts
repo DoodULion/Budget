@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Month, Purchase } from './calc';
-import { cardMonths, cardSummary, formatApr, linkedBills, parseApr, payoff, payoffForMonth, projection, totalSeries, type CreditCard } from './cards';
+import { cardMonths, cardSummary, debtBill, debtLabel, formatApr, isLoan, linkedBills, parseApr, payoff, payoffForMonth, projection, totalSeries, type CreditCard } from './cards';
 
 // Made-up figures only.
 const card: CreditCard = {
@@ -206,5 +206,49 @@ describe('closed card', () => {
     const later = cardMonths({ ...closed, closedMonth: '2027-02' }, [], today);
     expect(later[0].interestCents).toBe(1_400); // January still works like an open card: $700 left of the statement
     expect(later[1].interestCents).toBe(1_428);
+  });
+});
+
+describe('loans and minimum payments', () => {
+  const loan: CreditCard = {
+    id: 'car',
+    kind: 'auto-loan',
+    name: 'Car loan',
+    aprBps: 600,
+    startBalanceCents: 1_000_000,
+    startMonth: '2027-01',
+    minPaymentCents: 30_000,
+    payments: [{ id: 'a', date: '2027-01-10', amountCents: 30_000 }],
+  };
+  it('knows its type', () => {
+    expect(isLoan(loan)).toBe(true);
+    expect(isLoan(card)).toBe(false);
+    expect(debtLabel(loan)).toBe('Auto loan');
+    expect(debtLabel(card)).toBe('Credit card');
+  });
+  it('takes no purchases, and charges interest on each month\'s ending balance', () => {
+    const rows = cardMonths(loan, [buy('x', '2027-01-04', 9_999, 'Car loan')], today);
+    expect(rows[0]).toMatchObject({ chargesCents: 0, openingCents: 1_000_000, paymentsCents: 30_000, interestCents: 4_850, closingCents: 974_850 }); // $9,700 × 0.5%
+    expect(rows[1]).toMatchObject({ paymentsCents: 0, interestCents: 4_874, closingCents: 979_724 }); // nothing paid: $9,748.50 × 0.5%
+  });
+  it('is a loan in the summary, with the minimum as the payoff payment through its bill', () => {
+    const bill = debtBill(loan)!;
+    const linked = linkedBills(loan, { bills: [bill], months: [] }, today);
+    const s = cardSummary(loan, [], today, linked);
+    expect([s.loan, s.closed]).toEqual([true, true]);
+    expect(s.payoffPaymentCents).toBe(30_000);
+    expect(s.payoff.kind).toBe('months');
+  });
+  it('makes a fixed bill from the minimum payment', () => {
+    expect(debtBill(loan)).toEqual({ id: 'debt:car', name: 'Car loan payment', amountCents: 30_000, cardId: 'car' });
+  });
+  it('keeps autopay, last month and note the bill already has', () => {
+    const existing = { id: 'debt:car', name: 'old', amountCents: 1, lastMonth: '2030-01', note: 'n', autoPay: { day: 3, since: '2027-01' } };
+    expect(debtBill({ ...loan, minPaymentCents: 35_000 }, existing)).toEqual({ id: 'debt:car', name: 'Car loan payment', amountCents: 35_000, cardId: 'car', lastMonth: '2030-01', note: 'n', autoPay: { day: 3, since: '2027-01' } });
+  });
+  it('makes no bill without a minimum, or for a card paid in full', () => {
+    expect(debtBill({ ...loan, minPaymentCents: undefined })).toBeUndefined();
+    expect(debtBill({ ...card, minPaymentCents: 2_500, payInFull: true })).toBeUndefined();
+    expect(debtBill({ ...card, minPaymentCents: 2_500 })).toMatchObject({ name: 'Test Visa payment', amountCents: 2_500 });
   });
 });

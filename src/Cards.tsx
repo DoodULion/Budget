@@ -1,5 +1,5 @@
 import { Fragment, useState, type JSX } from 'react';
-import { cardSummary, formatApr, linkedBills, monthlyInterestCents, parseApr, payoff, projection, totalSeries, type CardPayment, type CardSummary, type CreditCard } from './cards';
+import { cardSummary, DEBT_KINDS, debtLabel, formatApr, isLoan, linkedBills, type DebtKind, monthlyInterestCents, parseApr, payoff, projection, totalSeries, type CardPayment, type CardSummary, type CreditCard } from './cards';
 import { formatCents, monthLabel, type Category, type MonthKey } from './calc';
 import Icon from './icons';
 import { centsToAmountInput, dayLabel, newId, parseCents } from './money';
@@ -21,7 +21,7 @@ const shortMonth = (m: MonthKey) => SHORT[Number(m.slice(5, 7)) - 1];
 const colorOf = (i: number) => `c${(i % 8) + 1}`;
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
-/** Credit cards: balances that follow the purchases you tag with each card, interest, and insights. */
+/** Debt: credit cards (balances follow the purchases tagged with the card) and loans, with interest, minimum payments and insights. */
 export default function Cards({ store, today }: { store: Store; today: string }) {
   const { cards, purchases, categories } = store.data;
   const [sel, setSel] = useState('all');
@@ -32,24 +32,24 @@ export default function Cards({ store, today }: { store: Store; today: string })
 
   return (
     <div className="screen">
-      <h1>Credit Cards</h1>
+      <h1>Debt</h1>
       {summaries.length === 0 ? (
         <section className="card">
-          <h2>Track your credit cards</h2>
+          <h2>Track what you owe</h2>
           <p className="muted">
-            Add a card with its APR and balance. Purchases you tag with the card under Paid with add to its balance automatically, and unpaid statements grow by the
-            monthly interest.
+            Add credit cards and loans (personal, student, auto) with their APR and balance. Set a minimum payment and it joins your fixed bills; marking that bill paid records the payment here.
+            Purchases tagged with a credit card under Paid with add to its balance automatically.
           </p>
           <button type="button" className="primary" onClick={() => setEditing('new')}>
-            Add a credit card
+            Add a debt
           </button>
         </section>
       ) : (
         <>
           {summaries.length > 1 && (
-            <div className="chips scroll-row" role="group" aria-label="Card">
+            <div className="chips scroll-row" role="group" aria-label="Debt">
               <button type="button" className={one ? '' : 'on'} aria-pressed={!one} onClick={() => setSel('all')}>
-                All cards
+                All debts
               </button>
               {summaries.map((s, i) => (
                 <button key={s.card.id} type="button" className={one?.card.id === s.card.id ? 'on' : ''} aria-pressed={one?.card.id === s.card.id} onClick={() => setSel(s.card.id)}>
@@ -66,7 +66,7 @@ export default function Cards({ store, today }: { store: Store; today: string })
           )}
           <button type="button" className="add-row" onClick={() => setEditing('new')}>
             <Icon name="add" />
-            Add a credit card
+            Add a debt
           </button>
         </>
       )}
@@ -95,9 +95,7 @@ function useArrange(screen: string, ids: readonly string[]) {
         }
       }}
     >
-      {order.map((id) => (
-        <Fragment key={id}>{cards[id]}</Fragment>
-      ))}
+      {order.map((id) => (cards[id] ? <Fragment key={id}>{cards[id]}</Fragment> : null))}
     </div>
   );
   return { drag, grid };
@@ -122,15 +120,15 @@ function Overview({ summaries, today, onOpen }: { summaries: CardSummary[]; toda
   const cards: Record<string, JSX.Element> = {
     total: (
       <section {...drag('total', 'card hero')} aria-labelledby="owed-h">
-        <h2 id="owed-h">Owed on all cards</h2>
+        <h2 id="owed-h">Owed on all debts</h2>
         <p className="big fit" style={{ ['--chars' as string]: Math.max(formatCents(owed).length, 4) }}>
           {formatCents(owed)}
         </p>
         {limit > 0 && <Meter spent={limitedOwed} budget={limit} label="Owed of total credit limit" />}
         <div className="rule">
           <div>
-            <Fig cents={sum((s) => s.chargesThisYearCents)} />
-            <span className="muted">Spent this year</span>
+            <Fig cents={sum((s) => s.paymentsThisYearCents)} />
+            <span className="muted">Paid this year</span>
           </div>
           <div>
             <Fig cents={interestAll} />
@@ -145,7 +143,7 @@ function Overview({ summaries, today, onOpen }: { summaries: CardSummary[]; toda
     ),
     list: (
       <section {...drag('list', 'card')} aria-labelledby="list-h">
-        <h2 id="list-h">Your cards</h2>
+        <h2 id="list-h">Your debts</h2>
         <ul className="cat-rows">
           {summaries.map((s, i) => (
             <li key={s.card.id} className="cat-row">
@@ -153,7 +151,7 @@ function Overview({ summaries, today, onOpen }: { summaries: CardSummary[]; toda
               <button type="button" className="cat-name card-open" onClick={() => onOpen(s.card.id)} aria-label={`Open ${s.card.name}`}>
                 <b>{s.card.name}</b>
                 <span>
-                  {formatApr(s.card.aprBps)} APR · {payoffShort(s)}
+                  {debtLabel(s.card)} · {formatApr(s.card.aprBps)} APR · {payoffShort(s)}
                 </span>
               </button>
               <div className="cat-left">{formatCents(s.balanceNowCents)}</div>
@@ -165,8 +163,8 @@ function Overview({ summaries, today, onOpen }: { summaries: CardSummary[]; toda
     ),
     chart: (
       <section {...drag('chart', 'card')} aria-labelledby="tot-h">
-        <h2 id="tot-h">Total balance over time</h2>
-        <BalanceChart points={series.map((p) => ({ month: p.month, cents: p.cents }))} projected={[]} label="Total owed on all cards" />
+        <h2 id="tot-h">Total owed over time</h2>
+        <BalanceChart points={series.map((p) => ({ month: p.month, cents: p.cents }))} projected={[]} label="Total owed on all debts" />
       </section>
     ),
     interest: (
@@ -179,9 +177,9 @@ function Overview({ summaries, today, onOpen }: { summaries: CardSummary[]; toda
           <dd>{formatCents(sum((s) => s.interestThisYearCents))}</dd>
           <dt>Costs a month at today's balances</dt>
           <dd>{formatCents(monthlyInterest)}</dd>
-          <dt>Spent on the cards, all time</dt>
+          <dt>Charged to cards, all time</dt>
           <dd>{formatCents(sum((s) => s.chargesAllCents))}</dd>
-          <dt>Paid toward the cards</dt>
+          <dt>Paid toward debts</dt>
           <dd>{formatCents(sum((s) => s.paymentsAllCents))}</dd>
         </dl>
       </section>
@@ -211,8 +209,8 @@ function Overview({ summaries, today, onOpen }: { summaries: CardSummary[]; toda
 
 function payoffShort(s: CardSummary): string {
   const p = s.payoff;
-  if (s.closed && p.kind === 'months') return `Closed · paid off ${monthLabel(p.lastMonth)}`;
-  if (s.closed && p.kind === 'noPlan') return 'Closed';
+  if (s.closed && !s.loan && p.kind === 'months') return `Closed · paid off ${monthLabel(p.lastMonth)}`;
+  if (s.closed && !s.loan && p.kind === 'noPlan') return 'Closed';
   if (p.kind === 'full') return 'Paid in full monthly';
   if (p.kind === 'clear') return 'Paid off';
   if (p.kind === 'noPlan') return 'Set a monthly payment';
@@ -260,7 +258,7 @@ function CardDetail({
       <section {...drag('balance', 'card hero')} aria-labelledby="bal-h">
         <div className="card-head">
           <h2 id="bal-h">
-            {card.name} balance {s.closed && <span className="pill idle">Closed</span>}
+            {card.name} balance {s.loan ? <span className="pill idle">{debtLabel(card)}</span> : s.closed && <span className="pill idle">Closed</span>}
           </h2>
           <button type="button" className="more" onClick={onEdit} aria-label={`Edit ${card.name}`} aria-haspopup="dialog">
             <Icon name="dots" />
@@ -269,18 +267,35 @@ function CardDetail({
         <p className={`big fit${s.balanceNowCents < 0 ? ' bad-text' : ''}`} style={{ ['--chars' as string]: Math.max(formatCents(s.balanceNowCents).length, 4) }}>
           {formatCents(s.balanceNowCents)}
         </p>
-        {card.limitCents ? <Meter spent={owedNow} budget={card.limitCents} label={`${card.name} balance of its limit`} /> : null}
-        <div className="rule">
-          <div>
-            <Fig text={formatApr(card.aprBps)} />
-            <span className="muted">APR</span>
+        {!s.loan && card.limitCents ? <Meter spent={owedNow} budget={card.limitCents} label={`${card.name} balance of its limit`} /> : null}
+        {s.loan ? (
+          <div className="rule">
+            <div>
+              <Fig text={formatApr(card.aprBps)} />
+              <span className="muted">APR</span>
+            </div>
+            <div>
+              <Fig cents={card.minPaymentCents} />
+              <span className="muted">Minimum</span>
+            </div>
+            <div>
+              <Fig cents={monthlyCost} />
+              <span className="muted">Interest a month</span>
+            </div>
           </div>
-          <div>{card.limitCents ? <Fig cents={Math.max(0, card.limitCents - owedNow)} /> : <Fig text="—" />}<span className="muted">Available</span></div>
-          <div>
-            <Fig text={s.utilization === undefined ? '—' : pct(s.utilization)} />
-            <span className="muted">Limit used</span>
+        ) : (
+          <div className="rule">
+            <div>
+              <Fig text={formatApr(card.aprBps)} />
+              <span className="muted">APR</span>
+            </div>
+            <div>{card.limitCents ? <Fig cents={Math.max(0, card.limitCents - owedNow)} /> : <Fig text="—" />}<span className="muted">Available</span></div>
+            <div>
+              <Fig text={s.utilization === undefined ? '—' : pct(s.utilization)} />
+              <span className="muted">Limit used</span>
+            </div>
           </div>
-        </div>
+        )}
         {s.utilization !== undefined && s.utilization > 0.3 && <p className="muted small">Keeping the balance under 30% of the limit is easier on a credit score.</p>}
       </section>
     ),
@@ -299,7 +314,8 @@ function CardDetail({
               <dd>about {formatCents(s.projectedInterestCents)}</dd>
             </dl>
             <p className="muted small">
-              This account is closed, so nothing new is charged. Each month {formatApr(card.aprBps)} ÷ 12 is added to that month's ending balance.
+              {s.loan ? 'Interest is added every month: ' : 'This account is closed, so nothing new is charged. Each month '}
+              {formatApr(card.aprBps)} ÷ 12 is added to that month's ending balance.
             </p>
           </>
         ) : s.statementCents === 0 ? (
@@ -413,8 +429,12 @@ function CardDetail({
           <dd>{formatCents(s.paymentsAllCents)}</dd>
           <dt>Average payment</dt>
           <dd>{formatCents(s.avgPaymentCents)}</dd>
-          <dt>Statements paid in full</dt>
-          <dd>{s.statements ? `${s.paidInFull} of ${s.statements}` : '—'}</dd>
+          {!s.loan && !s.closed && (
+            <>
+              <dt>Statements paid in full</dt>
+              <dd>{s.statements ? `${s.paidInFull} of ${s.statements}` : '—'}</dd>
+            </>
+          )}
         </dl>
         {s.interestAllCents > 0 && <BarChart label={`${card.name} interest each month`} items={interestRow.map((r) => ({ month: r.month, cents: r.interestCents }))} warm />}
       </section>
@@ -505,6 +525,10 @@ function CardDetail({
       </section>
     ),
   };
+  if (s.loan) {
+    delete cards.spending;
+    delete cards.categories;
+  }
   return grid(cards);
 }
 
@@ -617,7 +641,10 @@ function CardSheet({
 }) {
   const { cards, settings } = store.data;
   const { offer } = useUndo();
+  const [kind, setKind] = useState<DebtKind>(card?.kind ?? 'credit-card');
+  const loan = isLoan({ kind });
   const [name, setName] = useState(card?.name ?? '');
+  const [min, setMin] = useState(card?.minPaymentCents ? centsToAmountInput(card.minPaymentCents) : '');
   const [apr, setApr] = useState(card ? String(card.aprBps / 100) : '');
   const [balance, setBalance] = useState(card ? centsToAmountInput(card.startBalanceCents) : '');
   const [start, setStart] = useState(card?.startMonth ?? today.slice(0, 7));
@@ -632,19 +659,21 @@ function CardSheet({
   // An existing Paid with name keeps its spelling, so purchases already tagged with it link up.
   const typed = name.trim();
   const existing = settings.paidWith.find((m) => m.toLowerCase() === typed.toLowerCase());
-  const finalName = existing ?? typed;
+  const finalName = loan ? typed : (existing ?? typed);
   const taken = cards.some((c) => c.id !== card?.id && c.name.toLowerCase() === typed.toLowerCase());
   const linkable = settings.paidWith.filter((m) => !cards.some((c) => c.name === m) || m === card?.name);
   const aprBps = parseApr(apr);
   const bal = balance.trim() === '' ? 0 : parseCents(balance);
   const lim = limit.trim() === '' ? undefined : parseCents(limit);
   const pl = plan.trim() === '' ? undefined : parseCents(plan);
+  const mn = min.trim() === '' ? undefined : parseCents(min);
   const errors = [
     !typed && 'Enter a name',
-    taken && 'You already have a card with that name',
+    taken && 'You already have a debt with that name',
     aprBps === undefined && 'Enter the APR, like 24.99',
     bal === undefined && 'Enter the balance, like 1,250.00',
     limit.trim() !== '' && lim === undefined && 'Enter the limit as an amount',
+    min.trim() !== '' && mn === undefined && 'Enter the minimum payment as an amount',
     plan.trim() !== '' && pl === undefined && 'Enter the monthly payment as an amount',
     !/^\d{4}-(0[1-9]|1[0-2])$/.test(start) && 'Pick the month you start tracking',
     closed && !/^\d{4}-(0[1-9]|1[0-2])$/.test(closedMonth) && 'Pick the month the account closed',
@@ -655,16 +684,18 @@ function CardSheet({
     if (errors.length || aprBps === undefined || bal === undefined) return;
     const next: CreditCard = {
       id: card?.id ?? newId(),
+      ...(loan ? { kind } : {}),
       name: finalName,
       aprBps,
       startBalanceCents: bal,
       startMonth: start,
       payments: card?.payments ?? [],
     };
-    if (lim) next.limitCents = lim;
+    if (lim && !loan) next.limitCents = lim;
     if (pl) next.plannedPaymentCents = pl;
-    if (full && !closed) next.payInFull = true;
-    if (closed) next.closedMonth = closedMonth < start ? start : closedMonth;
+    if (mn) next.minPaymentCents = mn;
+    if (full && !closed && !loan) next.payInFull = true;
+    if (closed && !loan) next.closedMonth = closedMonth < start ? start : closedMonth;
     await store.saveCard(next, card?.name);
     if (card) offer(`Saved ${next.name}`, () => store.saveCard(card, next.name));
     else offer(`Added ${next.name}`, () => store.removeCard(next.id));
@@ -682,11 +713,14 @@ function CardSheet({
   if (confirm && card) {
     return (
       <SheetBackdrop onClose={onClose}>
-        <div className="sheet menu" role="alertdialog" aria-modal="true" aria-label="Confirm remove card">
+        <div className="sheet menu" role="alertdialog" aria-modal="true" aria-label="Confirm remove debt">
           <h2>Remove {card.name}?</h2>
-          <p className="muted small">Its balance, interest and payments are deleted. The name stays under Paid with, and past purchases keep it.</p>
+          <p className="muted small">
+            Its balance, interest and payments are deleted{card.minPaymentCents ? ', and so is its minimum payment under your fixed bills (months where it was paid keep it)' : ''}.
+            {!isLoan(card) && ' The name stays under Paid with, and past purchases keep it.'}
+          </p>
           <button type="button" className="danger armed" onClick={() => void remove()}>
-            Remove card
+            Remove debt
           </button>
           <button type="button" className="secondary" onClick={() => setConfirm(false)}>
             Cancel
@@ -709,12 +743,21 @@ function CardSheet({
           void save();
         }}
       >
-        <h2 id="cd-h">{card ? 'Edit card' : 'Add a credit card'}</h2>
+        <h2 id="cd-h">{card ? `Edit ${debtLabel(card).toLowerCase()}` : 'Add a debt'}</h2>
+        {!card && (
+          <div className="chips scroll-row" role="radiogroup" aria-label="Type of debt">
+            {DEBT_KINDS.map((k) => (
+              <button key={k.id} type="button" role="radio" aria-checked={kind === k.id} className={kind === k.id ? 'on' : ''} onClick={() => setKind(k.id)}>
+                {k.label}
+              </button>
+            ))}
+          </div>
+        )}
         <label className="field">
-          <span>Name (also shown under Paid with)</span>
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Blue Visa" autoComplete="off" />
+          <span>{loan ? 'Name' : 'Name (also shown under Paid with)'}</span>
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={loan ? 'e.g. Car loan' : 'e.g. Blue Visa'} autoComplete="off" />
         </label>
-        {!card && linkable.length > 0 && (
+        {!card && !loan && linkable.length > 0 && (
           <div className="chips scroll-row" role="group" aria-label="Use an existing Paid with name">
             {linkable.map((m) => (
               <button key={m} type="button" className={m === typed ? 'on' : ''} aria-pressed={m === typed} onClick={() => setName(m)}>
@@ -729,38 +772,46 @@ function CardSheet({
             <input type="text" inputMode="decimal" value={apr} onChange={(e) => setApr(e.target.value)} placeholder="24.99" autoComplete="off" />
           </label>
           <label className="field">
-            <span>Credit limit (optional)</span>
-            <MoneyInput value={limit} onValue={setLimit} placeholder="0.00" />
+            <span>Balance owed at start</span>
+            <MoneyInput value={balance} onValue={setBalance} placeholder="0.00" />
           </label>
         </div>
         <div className="grid2">
           <label className="field">
-            <span>Balance owed at start</span>
-            <MoneyInput value={balance} onValue={setBalance} placeholder="0.00" />
+            <span>Minimum payment</span>
+            <MoneyInput value={min} onValue={setMin} placeholder="0.00" />
           </label>
           <label className="field">
-            <span>Monthly payment (optional)</span>
+            <span>You plan to pay (optional)</span>
             <MoneyInput value={plan} onValue={setPlan} placeholder="0.00" />
           </label>
         </div>
+        {!loan && (
+          <label className="field">
+            <span>Credit limit (optional)</span>
+            <MoneyInput value={limit} onValue={setLimit} placeholder="0.00" />
+          </label>
+        )}
         <label className="field">
           <span>Tracking since</span>
           <input type="month" value={start} onChange={(e) => setStart(e.target.value)} />
         </label>
-        <button type="button" role="switch" aria-checked={closed} className={`switch-row${closed ? ' on' : ''}`} onClick={() => setClosed(!closed)}>
-          <span>
-            <b>Closed account</b>
-            <small>No new purchases can be added. Interest is charged every month on the month's ending balance.</small>
-          </span>
-          <i aria-hidden="true" />
-        </button>
-        {closed && (
+        {!loan && (
+          <button type="button" role="switch" aria-checked={closed} className={`switch-row${closed ? ' on' : ''}`} onClick={() => setClosed(!closed)}>
+            <span>
+              <b>Closed account</b>
+              <small>No new purchases can be added. Interest is charged every month on the month's ending balance.</small>
+            </span>
+            <i aria-hidden="true" />
+          </button>
+        )}
+        {!loan && closed && (
           <label className="field">
             <span>Closed since</span>
             <input type="month" value={closedMonth} onChange={(e) => setClosedMonth(e.target.value)} />
           </label>
         )}
-        {!closed && (
+        {!loan && !closed && (
           <button type="button" role="switch" aria-checked={full} className={`switch-row${full ? ' on' : ''}`} onClick={() => setFull(!full)}>
             <span>
               <b>Paid in full every month</b>
@@ -770,8 +821,11 @@ function CardSheet({
           </button>
         )}
         <p className="muted small">
-          Purchases tagged with this card under Paid with, dated {monthLabel(start)} or later, add to the balance. Enter what you owed at the start of that month. The planned payment drives the payoff
-          date; without it the average of your payments is used.
+          The minimum payment is added to your fixed bills as "{typed || 'name'} payment". Mark that bill paid on Summary (or turn on autopay) and the payment is recorded here.
+          {loan
+            ? ' Enter what you owed at the start of the tracking month. Interest is charged every month on the ending balance.'
+            : ` Purchases tagged with this card under Paid with, dated ${monthLabel(start)} or later, add to the balance. Enter what you owed at the start of that month.`}{' '}
+          The amount you plan to pay drives the payoff date; without it the minimum, then the average of your payments, is used.
         </p>
         {tried && errors.length > 0 && (
           <p className="error" role="alert">
@@ -780,11 +834,11 @@ function CardSheet({
         )}
         <div className="sheet-actions">
           <button type="submit" className="primary">
-            {card ? 'Save changes' : 'Add card'}
+            {card ? 'Save changes' : 'Add debt'}
           </button>
           {card && (
             <button type="button" className="danger" onClick={() => setConfirm(true)}>
-              Remove card
+              Remove debt
             </button>
           )}
           <button type="button" className="secondary" onClick={onClose}>
