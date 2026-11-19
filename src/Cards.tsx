@@ -302,7 +302,7 @@ function DebtInsights({ store, summaries, all, colorFor, today }: { store: Store
         <section className="card" aria-labelledby="know-h">
           <h2 id="know-h">Good to know</h2>
           <dl className="kv">
-            <dt>Interest a month at today's balances</dt>
+            <dt>Monthly interest at today's balances</dt>
             <dd>{formatCents(monthlyNow)}</dd>
             {!one && steepest && owing.length > 1 && (
               <>
@@ -410,11 +410,11 @@ function DebtList({ summaries, colorFor, onReorder, onOpen, onMenu }: { summarie
         <div className="rule">
           <div>
             <Fig cents={minimums} />
-            <span className="muted">Minimums a month</span>
+            <span className="muted">Monthly minimums</span>
           </div>
           <div>
             <Fig cents={monthlyInterest} />
-            <span className="muted">Interest a month</span>
+            <span className="muted">Monthly interest</span>
           </div>
           <div>
             <Fig text={String(live.length)} />
@@ -537,7 +537,7 @@ function CardDetail({
             </div>
             <div>
               <Fig cents={monthlyCost} />
-              <span className="muted">Interest a month</span>
+              <span className="muted">Monthly interest</span>
             </div>
           </div>
         ) : (
@@ -789,12 +789,15 @@ function CardSheet({
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={loan ? 'e.g. Car loan' : 'e.g. Blue Visa'} autoComplete="off" />
         </label>
         {!card && !loan && linkable.length > 0 && (
-          <div className="chips scroll-row" role="group" aria-label="Use an existing Paid with name">
+          <div className="field">
+          <span id="debt-pw-h">Or use a Paid with name</span>
+          <div className="chips scroll-row" role="group" aria-labelledby="debt-pw-h">
             {linkable.map((m) => (
               <button key={m} type="button" className={m === typed ? 'on' : ''} aria-pressed={m === typed} onClick={() => setName(m)}>
                 {m}
               </button>
             ))}
+          </div>
           </div>
         )}
         <div className="grid2">
@@ -859,7 +862,7 @@ function CardSheet({
           </button>
         )}
         <p className="muted small">
-          The minimum payment is added to your fixed bills as "{typed || 'name'} payment". Mark that bill paid on Overview (or turn on autopay) and the payment is recorded here.
+          The minimum payment is added to your fixed bills as "{typed || '<debt name>'} payment". Mark that bill paid on Overview (or turn on autopay) and the payment is recorded here.
           {loan
             ? ' Enter what you owed at the start of the tracking month. Interest is charged every month on the ending balance.'
             : ` Purchases tagged with this card under Paid with, dated ${monthLabel(start)} or later, add to the balance. Enter what you owed at the start of that month.`}{' '}

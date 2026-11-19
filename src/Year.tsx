@@ -36,11 +36,11 @@ export default function Year({ store, year, today }: { store: { data: import('./
         <div className="rule">
           <div>
             <Fig text={y.monthsGoalMetLabel} />
-            <span className="muted">Months goal met</span>
+            <span className="muted">Goal met</span>
           </div>
           <div>
             <Fig cents={y.checkingBalanceNowCents} />
-            <span className="muted">Checking now</span>
+            <span className="muted">Balance now</span>
           </div>
           <div>
             <Fig cents={goal} />

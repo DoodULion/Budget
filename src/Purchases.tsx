@@ -24,7 +24,8 @@ export default function Purchases({ store, month, today }: { store: Store; month
   const narrowed = query.trim() !== '' || filterCount(filter) > 0;
   const groups = byDay(shown);
   const catOf = (p: Purchase) => data.categories.find((c) => c.id === p.categoryId);
-  const describe = (p: Purchase) => [catOf(p)?.name ?? 'Deleted category', formatCents(p.amountCents), p.description, dayLabel(p.date)].filter(Boolean).join(', ');
+  // Named the way its row reads: the description (else the category), then the amount and the day.
+  const describe = (p: Purchase) => [p.description || (catOf(p)?.name ?? 'Deleted category'), formatCents(p.amountCents), dayLabel(p.date)].join(' · ');
   const current = sheet && 'id' in sheet ? data.purchases.find((p) => p.id === sheet.id) : undefined;
   const close = () => setSheet(null);
 

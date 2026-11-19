@@ -258,7 +258,7 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Rent" autoComplete="off" disabled={fromDebt} />
         </label>
         <label className="field">
-          <span>Each month</span>
+          <span>Amount each month</span>
           <MoneyInput value={amount} onValue={setAmount} placeholder="0.00" disabled={fromDebt} />
         </label>
         <label className="field">

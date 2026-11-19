@@ -948,7 +948,7 @@ main { padding-top: 14px; }
 /* segmented controls never clip their last choice on a small phone */
 .seg button { font-size: clamp(14px, 3.9vw, 16px); padding: 0 2px; }
 /* date fields show the whole date beside another field */
-input[type="date"] { padding-left: 10px; padding-right: 8px; font-size: 1rem; }
+input[type="date"], input[type="month"] { padding-left: 10px; padding-right: 8px; font-size: 1rem; }
 /* the bills Sort button sits close to the list it sorts */
 .sort-btn { margin-bottom: -8px; }
 /* a note under a sheet's field belongs to that field */
@@ -1032,3 +1032,9 @@ input[type="date"] { padding-left: 10px; padding-right: 8px; font-size: 1rem; }
 .min-plan small { color: var(--mute); font-weight: 600; font-size: 0.85rem; }
 .ychart .bar.cat-c1 { fill: var(--cat-c1); } .ychart .bar.cat-c2 { fill: var(--cat-c2); } .ychart .bar.cat-c3 { fill: var(--cat-c3); } .ychart .bar.cat-c4 { fill: var(--cat-c4); }
 .ychart .bar.cat-c5 { fill: var(--cat-c5); } .ychart .bar.cat-c6 { fill: var(--cat-c6); } .ychart .bar.cat-c7 { fill: var(--cat-c7); } .ychart .bar.cat-c8 { fill: var(--cat-c8); }
+/* Month fields sit two to a row in the simulator sheets: let the picker icon go before the month name gets cut. */
+@media (max-width: 400px) {
+  .grid2 input[type="month"]::-webkit-calendar-picker-indicator { display: none; }
+}
+/* Two columns: the pass keeps its own height instead of stretching to its neighbour's. */
+.cols > .hero { align-self: start; }
