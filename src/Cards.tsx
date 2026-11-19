@@ -1,8 +1,8 @@
 import { Fragment, useState, type JSX } from 'react';
-import { cardSummary, DEBT_KINDS, interestSaved, isPaidOff, minimumFor, debtLabel, formatApr, isLoan, linkedBills, type DebtKind, monthlyInterestCents, parseApr, payoff, projection, totalSeries, type CardPayment, type CardSummary, type CreditCard } from './cards';
+import { cardSummary, DEBT_KINDS, debtBillId, interestSaved, isPaidOff, minimumFor, debtLabel, formatApr, isLoan, linkedBills, type DebtKind, monthlyInterestCents, parseApr, payoff, projection, totalSeries, type CardPayment, type CardSummary, type CreditCard } from './cards';
 import { formatCents, monthLabel, type Category, type MonthKey } from './calc';
 import Icon from './icons';
-import { centsToAmountInput, dayLabel, newId, parseCents } from './money';
+import { centsToAmountInput, dayLabel, newId, ordinal, parseCents } from './money';
 import SheetBackdrop from './SheetBackdrop';
 import type { Store } from './store';
 import { useUndo } from './undo';
@@ -341,6 +341,12 @@ function CardDetail({
           <h2 id="st-h">{s.closed ? 'This month' : "This month's statement"}</h2>
           {!s.closed && s.statementCents > 0 && <span className={`pill${s.leftToAvoidInterestCents > 0 ? ' idle' : ''}`}>{s.leftToAvoidInterestCents > 0 ? (card.payInFull ? 'Due' : 'Unpaid') : 'Paid'}</span>}
         </div>
+        {card.dueDay && !isPaidOff(card, s) && (
+          <p className="muted small due-line">
+            Due on the {card.dueDay}
+            {ordinal(card.dueDay)} · {card.minPaymentCents ? `${formatCents(card.minPaymentCents)} is recorded automatically that day` : 'set a minimum payment to record it automatically'}
+          </p>
+        )}
         {s.closed ? (
           <>
             <dl className="kv">
@@ -690,6 +696,8 @@ function CardSheet({
   const loan = isLoan({ kind });
   const [name, setName] = useState(card?.name ?? '');
   const [min, setMin] = useState(card?.minPaymentCents ? centsToAmountInput(card.minPaymentCents) : '');
+  const legacyDay = card ? store.data.bills.find((b) => b.id === debtBillId(card.id) && !b.deleted)?.autoPay?.day : undefined;
+  const [due, setDue] = useState(String(card?.dueDay ?? legacyDay ?? ''));
   const [apr, setApr] = useState(card ? String(card.aprBps / 100) : '');
   const [balance, setBalance] = useState(card ? centsToAmountInput(card.startBalanceCents) : '');
   const [start, setStart] = useState(card?.startMonth ?? today.slice(0, 7));
@@ -711,6 +719,7 @@ function CardSheet({
   const bal = balance.trim() === '' ? 0 : parseCents(balance);
   const lim = limit.trim() === '' ? undefined : parseCents(limit);
   const pl = plan.trim() === '' ? undefined : parseCents(plan);
+  const dueNum = Number(due);
   const mn = min.trim() === '' ? undefined : parseCents(min);
   const errors = [
     !typed && 'Enter a name',
@@ -718,6 +727,8 @@ function CardSheet({
     aprBps === undefined && 'Enter the APR, like 24.99',
     bal === undefined && 'Enter the balance, like 1,250.00',
     limit.trim() !== '' && lim === undefined && 'Enter the limit as an amount',
+    due.trim() !== '' && !(Number.isInteger(dueNum) && dueNum >= 1 && dueNum <= 31) && 'Enter the due day as a day of the month, 1 to 31',
+    due.trim() !== '' && !mn && 'Set a minimum payment so it can be recorded on the due date',
     min.trim() !== '' && mn === undefined && 'Enter the minimum payment as an amount',
     plan.trim() !== '' && pl === undefined && 'Enter the monthly payment as an amount',
     !/^\d{4}-(0[1-9]|1[0-2])$/.test(start) && 'Pick the month you start tracking',
@@ -739,6 +750,7 @@ function CardSheet({
     if (lim && !loan) next.limitCents = lim;
     if (pl) next.plannedPaymentCents = pl;
     if (mn) next.minPaymentCents = mn;
+    if (due.trim() !== '' && !(full && !loan)) next.dueDay = dueNum;
     if (card?.paidOffDate) next.paidOffDate = card.paidOffDate;
     if (card?.interestSavedCents !== undefined) next.interestSavedCents = card.interestSavedCents;
     if (full && !closed && !loan) next.payInFull = true;
@@ -833,6 +845,13 @@ function CardSheet({
             <MoneyInput value={plan} onValue={setPlan} placeholder="0.00" />
           </label>
         </div>
+        {(loan || !full) && (
+          <label className="field">
+            <span>Due date (day of the month, optional)</span>
+            <input type="text" inputMode="numeric" value={due} onChange={(e) => setDue(e.target.value.replace(/\D/g, '').slice(0, 2))} placeholder="1 to 31" autoComplete="off" />
+          </label>
+        )}
+        {(loan || !full) && <p className="muted small">On the due date each month the minimum payment is recorded automatically and lowers the balance.</p>}
         {!loan && (
           <label className="field">
             <span>Credit limit (optional)</span>

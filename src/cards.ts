@@ -11,6 +11,7 @@
  * A card set to pay in full every month has every finished month's statement paid automatically (on top of any payments entered), so it never carries interest.
  * The month in progress has no interest yet; it shows what would be added if the statement stays unpaid.
  */
+import { todayLocal } from './money';
 import { billRows, addMonths, type Bill, monthOf, monthRange, roundDiv, type Cents, type Data, type DateKey, type MonthKey, type Purchase } from './calc';
 
 export interface CardPayment {
@@ -57,6 +58,11 @@ export interface CreditCard {
   closedMonth?: MonthKey;
   /** The minimum monthly payment. It appears in the fixed bills as "<name> payment" and is kept in step (see debtBill). */
   minPaymentCents?: Cents;
+  /**
+   * The day of the month the minimum payment is due (1–31). On that day each month the payment is recorded automatically:
+   * the debt's minimum-payment bill is marked paid (autopay), which lowers the balance. Needs a minimum payment.
+   */
+  dueDay?: number;
   /** The day the balance was paid off with "Pay off balance". Once the balance is zero, the minimum payment bill and autopay stop (see isPaidOff). */
   paidOffDate?: DateKey;
   /** Interest saved by paying off early instead of making only the minimum, worked out when "Pay off balance" was recorded. */
@@ -352,7 +358,7 @@ export function debtBillChanges(data: Data, today: DateKey): { put: Bill[]; remo
     if (paidOff.has(card.id)) {
       if (live) remove.push(live.id);
     } else if (!live) {
-      const bill = debtBill(card, existing);
+      const bill = debtBill(card, existing, today);
       if (bill) put.push(bill);
     }
   }
@@ -368,12 +374,16 @@ export const isDebtBill = (b: Pick<Bill, 'id'>) => b.id.startsWith('debt:');
  * or undefined when the debt has no minimum (or is a card paid in full each month). Keeps what the bill already has
  * that the debt doesn't decide (autopay, last month, note) from `existing`.
  */
-export function debtBill(debt: CreditCard, existing?: Bill): Bill | undefined {
+export function debtBill(debt: CreditCard, existing?: Bill, today: DateKey = todayLocal()): Bill | undefined {
   if (!debt.minPaymentCents || (debt.payInFull && !isLoan(debt))) return undefined;
   const bill: Bill = { id: debtBillId(debt.id), name: `${debt.name} payment`, amountCents: debt.minPaymentCents, cardId: debt.id };
   if (existing?.lastMonth) bill.lastMonth = existing.lastMonth;
   if (existing?.note) bill.note = existing.note;
-  if (existing?.autoPay) bill.autoPay = existing.autoPay;
+  // The due date owns the bill's autopay: it starts this month (earlier months were tracked by hand), unless the day is unchanged.
+  if (debt.dueDay) {
+    const since = existing?.autoPay?.day === debt.dueDay ? existing.autoPay.since : monthOf(today) < debt.startMonth ? debt.startMonth : monthOf(today);
+    bill.autoPay = { day: debt.dueDay, since };
+  }
   return bill;
 }
 
