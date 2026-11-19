@@ -54,3 +54,6 @@ export function dayLabel(date: string): string {
   const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
   return `${wd} ${m}/${d}`;
 }
+
+/** 1st, 2nd, 3rd, 4th … (the suffix only). */
+export const ordinal = (n: number): string => (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');

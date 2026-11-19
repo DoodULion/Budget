@@ -18,7 +18,7 @@ import {
 import { saveFile } from './download';
 import Icon from './icons';
 import { isDebtBill } from './cards';
-import { centsToAmountInput, newId, parseCents, todayLocal } from './money';
+import { centsToAmountInput, newId, ordinal, parseCents, todayLocal } from './money';
 import SheetBackdrop from './SheetBackdrop';
 import type { Store } from './store';
 import { getThemeChoice, setThemeChoice, type ThemeChoice } from './theme';
@@ -133,7 +133,6 @@ function PlanCard({ store, today, step }: { store: Store; today: string; step?: 
 
 /* ---------- bills ---------- */
 
-const ordinal = (n: number) => (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');
 
 function BillsCard({ store, step }: { store: Store; step?: number }) {
   const bills = store.data.bills.filter((b) => !b.deleted);
@@ -195,8 +194,8 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
   const errors = [
     !name.trim() && 'Enter a name',
     (cents === undefined || cents === 0) && 'Enter the monthly amount',
-    auto && !(Number.isInteger(dayNum) && dayNum >= 1 && dayNum <= 31) && 'Enter the autopay day, 1 to 31',
-    auto && !/^\d{4}-(0[1-9]|1[0-2])$/.test(autoSince) && 'Pick the month autopay starts',
+    auto && !fromDebt && !(Number.isInteger(dayNum) && dayNum >= 1 && dayNum <= 31) && 'Enter the autopay day, 1 to 31',
+    auto && !fromDebt && !/^\d{4}-(0[1-9]|1[0-2])$/.test(autoSince) && 'Pick the month autopay starts',
   ].filter(Boolean) as string[];
 
   async function save() {
@@ -205,7 +204,9 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
     const next: Bill = { id: bill?.id ?? newId(), name: name.trim(), amountCents: cents };
     if (ends) next.lastMonth = ends;
     if (note.trim()) next.note = note.trim();
-    if (auto) next.autoPay = { day: dayNum, since: autoSince };
+    if (fromDebt) {
+      if (bill?.autoPay) next.autoPay = bill.autoPay;
+    } else if (auto) next.autoPay = { day: dayNum, since: autoSince };
     if (cardId && store.data.cards.some((c) => c.id === cardId)) next.cardId = cardId;
     await store.putBill(next);
     if (bill) offer(`Saved ${next.name}`, () => store.putBill(bill));
@@ -251,7 +252,7 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
         }}
       >
         <h2 id="bill-edit-h">{bill ? 'Edit bill' : 'Add a bill'}</h2>
-        {fromDebt && <p className="muted small">This is the minimum payment of {debt?.name ?? 'a debt'}. Change its name or amount on the Debt tab. Autopay, last payment and note can be set here.</p>}
+        {fromDebt && <p className="muted small">This is the minimum payment of {debt?.name ?? 'a debt'}. Change its name or amount on the Debt tab. Autopay follows its due date. Last payment and note can be set here.</p>}
         <label className="field">
           <span>Name</span>
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Rent" autoComplete="off" disabled={fromDebt} />
@@ -264,14 +265,15 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
           <span>Last payment (optional)</span>
           <input type="month" value={ends} onChange={(e) => setEnds(e.target.value)} />
         </label>
-        <button type="button" role="switch" aria-checked={auto} className={`switch-row${auto ? ' on' : ''}`} onClick={() => setAuto(!auto)}>
+        {fromDebt && <p className="muted small">{bill?.autoPay ? `Autopay is on the ${bill.autoPay.day}${ordinal(bill.autoPay.day)}, from the due date on the Debt tab.` : 'To record this payment automatically, set a due date on the Debt tab.'}</p>}
+        {!fromDebt && <button type="button" role="switch" aria-checked={auto} className={`switch-row${auto ? ' on' : ''}`} onClick={() => setAuto(!auto)}>
           <span>
             <b>Autopay</b>
             <small>Records this bill as paid on its day every month, no tapping.</small>
           </span>
           <i aria-hidden="true" />
-        </button>
-        {auto && (
+        </button>}
+        {auto && !fromDebt && (
           <div className="grid2">
             <label className="field">
               <span>Day of the month</span>
@@ -384,8 +386,8 @@ function CategoriesCard({ store, today, step }: { store: Store; today: string; s
       </button>
       {cats.length > 1 && (
         <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
-          <span>Show on the Add tab</span>
-          <div className="chips" role="group" aria-label="Categories shown on the Add tab">
+          <span>Show when adding a purchase</span>
+          <div className="chips" role="group" aria-label="Categories offered when adding a purchase">
             {cats.map((c) => {
               const shown = !c.hidden;
               const lastShown = shown && cats.filter((x) => !x.hidden).length === 1;
@@ -407,7 +409,7 @@ function CategoriesCard({ store, today, step }: { store: Store; today: string; s
               );
             })}
           </div>
-          <p className="muted small">A hidden category keeps its budget and still shows on Summary. At least one stays on Add.</p>
+          <p className="muted small">A hidden category keeps its budget and still shows on Overview. At least one stays on the + in Purchases.</p>
         </fieldset>
       )}
       {editing && <CategorySheet store={store} category={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} />}

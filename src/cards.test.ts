@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Month, Purchase } from './calc';
-import type { Data } from './calc';
-import { cardMonths, cardSummary, debtBill, debtBillChanges, interestSaved, isPaidOff, minimumFor, paidOffIds, debtLabel, formatApr, isLoan, linkedBills, parseApr, payoff, payoffForMonth, projection, totalSeries, type CreditCard } from './cards';
+import { autopayMonths, type Data } from './calc';
+import { cardMonths, cardSummary, debtBill, debtBillChanges, groupDebtBills, interestSaved, isPaidOff, minimumFor, paidOffIds, debtLabel, formatApr, isLoan, linkedBills, parseApr, payoff, payoffForMonth, projection, totalSeries, type CreditCard } from './cards';
 
 // Made-up figures only.
 const card: CreditCard = {
@@ -243,9 +243,9 @@ describe('loans and minimum payments', () => {
   it('makes a fixed bill from the minimum payment', () => {
     expect(debtBill(loan)).toEqual({ id: 'debt:car', name: 'Car loan payment', amountCents: 30_000, cardId: 'car' });
   });
-  it('keeps autopay, last month and note the bill already has', () => {
+  it('keeps last month and note the bill already has, and autopay while the due day is the same', () => {
     const existing = { id: 'debt:car', name: 'old', amountCents: 1, lastMonth: '2030-01', note: 'n', autoPay: { day: 3, since: '2027-01' } };
-    expect(debtBill({ ...loan, minPaymentCents: 35_000 }, existing)).toEqual({ id: 'debt:car', name: 'Car loan payment', amountCents: 35_000, cardId: 'car', lastMonth: '2030-01', note: 'n', autoPay: { day: 3, since: '2027-01' } });
+    expect(debtBill({ ...loan, minPaymentCents: 35_000, dueDay: 3 }, existing, '2027-06-01')).toEqual({ id: 'debt:car', name: 'Car loan payment', amountCents: 35_000, cardId: 'car', lastMonth: '2030-01', note: 'n', autoPay: { day: 3, since: '2027-01' } });
   });
   it('makes no bill without a minimum, or for a card paid in full', () => {
     expect(debtBill({ ...loan, minPaymentCents: undefined })).toBeUndefined();
@@ -313,5 +313,59 @@ describe('interest saved by paying off early', () => {
     expect(minimumFor({ ...card, minPaymentCents: 2_500 }, { payments: [], billAmountCents: 9_000 })).toBe(2_500);
     expect(minimumFor(card, { payments: [], billAmountCents: 9_000 })).toBe(9_000);
     expect(minimumFor(card, { payments: [], billAmountCents: 0 })).toBeUndefined();
+  });
+});
+
+describe('due date', () => {
+  const loan: CreditCard = { id: 'car', kind: 'auto-loan', name: 'Car loan', aprBps: 600, startBalanceCents: 1_000_000, startMonth: '2026-06', minPaymentCents: 30_000, dueDay: 15, payments: [] };
+  it('makes the minimum bill autopay on the due day, starting this month', () => {
+    expect(debtBill(loan, undefined, '2027-02-20')!.autoPay).toEqual({ day: 15, since: '2027-02' });
+    expect(debtBill({ ...loan, startMonth: '2027-04' }, undefined, '2027-02-20')!.autoPay).toEqual({ day: 15, since: '2027-04' });
+  });
+  it('keeps the start month while the day is unchanged, restarts it when the day changes', () => {
+    const existing = debtBill(loan, undefined, '2027-02-20')!;
+    expect(debtBill(loan, existing, '2027-06-01')!.autoPay).toEqual({ day: 15, since: '2027-02' });
+    expect(debtBill({ ...loan, dueDay: 20 }, existing, '2027-06-01')!.autoPay).toEqual({ day: 20, since: '2027-06' });
+  });
+  it('has no autopay without a due date', () => {
+    expect(debtBill({ ...loan, dueDay: undefined }, debtBill(loan, undefined, '2027-02-20'), '2027-06-01')!.autoPay).toBeUndefined();
+  });
+  it('records the payment on the due date each month and lowers the balance', () => {
+    const bill = debtBill({ ...loan, startMonth: '2027-01' }, undefined, '2027-01-02')!;
+    const d: Data = { settings: { firstMonth: '2027-01' } as Data['settings'], bills: [bill], cards: [{ ...loan, startMonth: '2027-01' }], categories: [], months: [], purchases: [] };
+    expect(autopayMonths(d, '2027-02-14').map((m) => m.month)).toEqual(['2027-01']); // Feb's 15th hasn't come
+    const months = autopayMonths(d, '2027-02-15');
+    expect(months.map((m) => m.payments['debt:car'])).toEqual([{ datePaid: '2027-01-15', auto: true }, { datePaid: '2027-02-15', auto: true }]);
+    const linked = linkedBills({ ...loan, startMonth: '2027-01' }, { bills: [bill], months }, '2027-02-15');
+    expect(linked.payments.map((p) => [p.date, p.amountCents])).toEqual([['2027-01-15', 30_000], ['2027-02-15', 30_000]]);
+    const s = cardSummary({ ...loan, startMonth: '2027-01' }, [], '2027-02-15', linked);
+    expect(s.balanceNowCents).toBeLessThan(1_000_000 - 60_000 + 10_000); // two payments off, a little interest on
+    expect(s.balanceNowCents).toBeGreaterThan(1_000_000 - 60_000);
+  });
+});
+
+describe('combining debt bills of the same type', () => {
+  const debt = (id: string, kind?: CreditCard['kind']): CreditCard => ({ id, kind, name: id, aprBps: 0, startBalanceCents: 0, startMonth: '2027-01', payments: [] });
+  const row = (id: string, cardId: string | undefined, status: 'paid' | 'unpaid' | 'ended', amount = 10_000, counted = status === 'paid' ? amount : 0) => ({
+    bill: { id, name: id, amountCents: amount, cardId },
+    amountCents: amount,
+    status,
+    countedCents: counted,
+  });
+  const debts = [debt('a'), debt('b'), debt('c', 'auto-loan'), debt('d', 'student-loan'), debt('e')];
+
+  it('groups bills that pay the same type of debt, where the first one was', () => {
+    const rows = [row('rent', undefined, 'paid'), row('pa', 'a', 'paid', 5_000, 5_500), row('car', 'c', 'unpaid'), row('pb', 'b', 'unpaid', 2_000), row('pe', 'e', 'ended')];
+    const items = groupDebtBills(rows, debts);
+    expect(items.map((i) => (i.kind === 'bill' ? i.row.bill.id : `group:${i.id}`))).toEqual(['rent', 'group:credit-card', 'car']);
+    const g = items[1];
+    if (g.kind !== 'group') throw new Error('expected a group');
+    expect(g.label).toBe('Credit cards');
+    expect(g.rows.map((r) => r.bill.id)).toEqual(['pa', 'pb', 'pe']);
+    expect([g.paid, g.amountCents]).toEqual([1, 5_500 + 2_000]); // the paid one counts what was paid, the unpaid its amount, the ended none
+  });
+  it('leaves a lone debt bill, and bills that pay nothing, as plain rows', () => {
+    const items = groupDebtBills([row('pa', 'a', 'paid'), row('car', 'c', 'paid'), row('x', 'gone', 'unpaid')], debts);
+    expect(items.every((i) => i.kind === 'bill')).toBe(true);
   });
 });
