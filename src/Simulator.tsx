@@ -119,6 +119,8 @@ export default function Simulator({ store, today }: { store: Store; today: strin
   const [editing, setEditing] = useState<Change | Change['kind'] | 'pick' | null>(null);
   // The results popup: for one change (on top of the others) or for all of them.
   const [results, setResults] = useState<Change | 'all' | null>(null);
+  // After a change is saved: ask whether to add another or see the results of all of them together.
+  const [justSaved, setJustSaved] = useState<Change | null>(null);
   useEffect(() => {
     try {
       localStorage.setItem(KEY, JSON.stringify(st));
@@ -151,7 +153,7 @@ export default function Simulator({ store, today }: { store: Store; today: strin
   const [planSheet, setPlanSheet] = useState(false);
   function saveChange(c: Change) {
     setPlan(plan.id, { changes: plan.changes.some((x) => x.id === c.id) ? plan.changes.map((x) => (x.id === c.id ? c : x)) : [...plan.changes, c], off: plan.off.filter((x) => x !== c.id) });
-    setResults(c);
+    setJustSaved(c);
   }
   function removeChange(c: Change) {
     const { id, changes: before, off: offBefore } = plan;
@@ -457,7 +459,7 @@ export default function Simulator({ store, today }: { store: Store; today: strin
         <ResultSheet
           {...(results === 'all' ? { before: base, after: scen } : changeImpact(input, changes, results))}
           change={results === 'all' ? undefined : results}
-          title={results === 'all' ? `All ${changes.length} ${changes.length === 1 ? 'change' : 'changes'}` : describeChange(results).title}
+          title={results === 'all' ? (changes.length === 1 ? describeChange(changes[0]).title : `All ${changes.length} changes together`) : describeChange(results).title}
           end={end}
           savingsGoalCents={data.settings.savingsGoalCents}
           onEdit={results === 'all' ? undefined : () => {
@@ -466,6 +468,36 @@ export default function Simulator({ store, today }: { store: Store; today: strin
           }}
           onClose={() => setResults(null)}
         />
+      )}
+      {justSaved && (
+        <SheetBackdrop onClose={() => setJustSaved(null)}>
+          <div className="sheet menu" role="dialog" aria-modal="true" aria-labelledby="next-h">
+            <h2 id="next-h">Change saved</h2>
+            <p className="muted">
+              {describeChange(justSaved).title}. {changes.length > 1 ? `${plan.name} now has ${changes.length} changes that count together.` : 'Add more to stack them, or see what it does now.'}
+            </p>
+            <button
+              type="button"
+              className="secondary with-ic"
+              onClick={() => {
+                setJustSaved(null);
+                setEditing('pick');
+              }}
+            >
+              <Icon name="add" /> Add another change
+            </button>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                setJustSaved(null);
+                setResults('all');
+              }}
+            >
+              See the results{changes.length > 1 ? ` of all ${changes.length}` : ''}
+            </button>
+          </div>
+        </SheetBackdrop>
       )}
       {editing === 'pick' && <PickSheet onPick={(k) => setEditing(k)} onClose={() => setEditing(null)} debtsCount={debts.length} />}
       {editing && editing !== 'pick' && (
