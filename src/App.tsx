@@ -1,49 +1,164 @@
-import { useEffect, useState } from 'react';
-import { formatCents, monthLabel, monthSummary, thisMonth, type Data } from './calc';
-import { loadData, requestPersistence } from './db';
-import { todayLocal } from './money';
+import { useRef, useState } from 'react';
+import Add from './Add';
+import { addMonths, monthLabel, thisMonth, type MonthKey } from './calc';
+import Icon, { type IconName } from './icons';
+import Month from './Month';
+import Purchases from './Purchases';
+import Setup from './Setup';
+import { useStore, type Store } from './store';
+import { UndoProvider } from './undo';
+import { useToday } from './useToday';
+import Year from './Year';
 
-/**
- * App shell. Step 2 sets up storage, offline support and the tested math;
- * the screens (first-run setup, Month, Add, Purchases, Year, Setup) arrive in step 3.
- */
+type Tab = 'month' | 'add' | 'purchases' | 'year' | 'setup';
+
+const TABS: { id: Tab; label: string; icon: IconName }[] = [
+  { id: 'month', label: 'Month', icon: 'month' },
+  { id: 'add', label: 'Add', icon: 'add' },
+  { id: 'purchases', label: 'Purchases', icon: 'entries' },
+  { id: 'year', label: 'Year', icon: 'year' },
+  { id: 'setup', label: 'Setup', icon: 'setup' },
+];
+
 export default function App() {
-  const [data, setData] = useState<Data>();
-  const [error, setError] = useState<string>();
+  const app = useStore();
+  const today = useToday();
+  if (!app.ready) return <p className="screen" style={{ padding: 16 }}>Loading…</p>;
+  if (!app.data.settings.setupDone) return <FirstRun store={app} today={today} />;
+  return <Main store={app} today={today} />;
+}
 
-  useEffect(() => {
-    void requestPersistence();
-    loadData().then(setData, () => setError('Could not open this device’s storage.'));
-  }, []);
+function FirstRun({ store, today }: { store: Store; today: string }) {
+  return (
+    <div className="app first">
+      <UndoProvider>
+        <main>
+          <Setup store={store} today={today} firstRun onStart={() => document.querySelector('main')?.scrollTo(0, 0)} />
+        </main>
+      </UndoProvider>
+    </div>
+  );
+}
 
-  const today = todayLocal();
-  const month = data ? thisMonth(data.settings, today) : undefined;
-  const summary = data && month ? monthSummary(data, month, today) : undefined;
+function Main({ store, today }: { store: Store; today: string }) {
+  const { settings } = store.data;
+  const current = thisMonth(settings, today);
+  const [tab, setTab] = useState<Tab>('month');
+  const [month, setMonth] = useState<MonthKey>(current);
+  const [year, setYear] = useState(Number(current.slice(0, 4)));
+  const motion = useRef('');
+
+  function go(next: Tab) {
+    if (next === tab) return;
+    const from = TABS.findIndex((t) => t.id === tab);
+    const to = TABS.findIndex((t) => t.id === next);
+    motion.current = to > from ? 'fwd' : 'back';
+    setTab(next);
+    document.querySelector('main')?.scrollTo(0, 0);
+  }
+
+  const firstYear = Number(settings.firstMonth.slice(0, 4));
+  const lastYear = Math.max(firstYear, Number(current.slice(0, 4)) + 1);
+  const lastMonth = addMonths(current, 12);
+
+  let band;
+  if (tab === 'month' || tab === 'purchases') {
+    band = (
+      <Stepper
+        label={monthLabel(month)}
+        sub={month === current ? 'This month' : undefined}
+        onToday={month === current ? undefined : () => setMonth(current)}
+        prev={month > settings.firstMonth ? () => setMonth(addMonths(month, -1)) : undefined}
+        next={month < lastMonth ? () => setMonth(addMonths(month, 1)) : undefined}
+        unit="month"
+      />
+    );
+  } else if (tab === 'year') {
+    band = (
+      <Stepper
+        label={String(year)}
+        sub={year === Number(current.slice(0, 4)) ? 'This year' : undefined}
+        onToday={year === Number(current.slice(0, 4)) ? undefined : () => setYear(Number(current.slice(0, 4)))}
+        prev={year > firstYear ? () => setYear(year - 1) : undefined}
+        next={year < lastYear ? () => setYear(year + 1) : undefined}
+        unit="year"
+      />
+    );
+  } else {
+    band = (
+      <p className="band-title center">
+        {monthLabel(current)}
+        <span className="band-sub">This month</span>
+      </p>
+    );
+  }
 
   return (
-    <main className="shell">
-      <header className="shell-header">
-        <h1>Budget Tracker</h1>
-        {month && <p className="mute">{monthLabel(month)}</p>}
-      </header>
-      {error && <p className="card">{error}</p>}
-      {data && !data.settings.setupDone && (
-        <section className="card">
-          <h2>Getting ready</h2>
-          <p className="mute">
-            Your data stays on this phone. Setup for your income, bills and categories comes in the next build.
-          </p>
-        </section>
-      )}
-      {summary && data?.settings.setupDone && (
-        <section className="card">
-          <h2>Budget left</h2>
-          <p className="figure">{formatCents(summary.budgetLeftCents)}</p>
-          <p className="mute">
-            {formatCents(summary.spentCents)} spent of {formatCents(summary.spendingBudgetCents)}
-          </p>
-        </section>
-      )}
-    </main>
+    <div className="app">
+      <UndoProvider>
+        <header className="band">
+          <div className="band-in">{band}</div>
+        </header>
+        <main>
+          <div key={tab} className={`page ${motion.current}`}>
+            {tab === 'month' ? (
+              <Month store={store} month={month} today={today} />
+            ) : tab === 'add' ? (
+              <Add store={store} today={today} />
+            ) : tab === 'purchases' ? (
+              <Purchases store={store} month={month} today={today} />
+            ) : tab === 'year' ? (
+              <Year store={store} year={year} today={today} />
+            ) : (
+              <Setup store={store} today={today} />
+            )}
+          </div>
+        </main>
+        <nav className="tabbar" aria-label="Sections">
+          {TABS.map((t) => (
+            <button key={t.id} type="button" className={tab === t.id ? 'on' : ''} aria-current={tab === t.id ? 'page' : undefined} onClick={() => go(t.id)}>
+              <Icon name={t.icon} />
+              {t.label}
+            </button>
+          ))}
+        </nav>
+      </UndoProvider>
+    </div>
+  );
+}
+
+function Stepper({
+  label,
+  sub,
+  onToday,
+  prev,
+  next,
+  unit,
+}: {
+  label: string;
+  sub?: string;
+  onToday?: () => void;
+  prev?: () => void;
+  next?: () => void;
+  unit: string;
+}) {
+  return (
+    <div className="band-step">
+      <button type="button" className="hit" onClick={prev} disabled={!prev} aria-label={`Previous ${unit}`}>
+        <Icon name="back" />
+      </button>
+      <p className="band-title" aria-live="polite">
+        {label}
+        {sub && <span className="band-sub">{sub}</span>}
+        {onToday && (
+          <button type="button" className="today-btn" onClick={onToday}>
+            Back to this {unit}
+          </button>
+        )}
+      </p>
+      <button type="button" className="hit" onClick={next} disabled={!next} aria-label={`Next ${unit}`}>
+        <Icon name="next" />
+      </button>
+    </div>
   );
 }
