@@ -31,7 +31,7 @@ export default function Purchases({ store, month, today }: { store: Store; month
 
   async function remove(p: Purchase) {
     await store.removePurchase(p.id);
-    offer(`Deleted ${describe(p)}`, () => store.putPurchase(p));
+    offer(`Deleted ${describe(p)}`, () => store.putPurchase(p), 'warn');
     close();
   }
 

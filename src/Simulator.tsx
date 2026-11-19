@@ -114,12 +114,12 @@ export default function Simulator({ store, today }: { store: Store; today: strin
   function removeChange(c: Change) {
     const before = st.changes;
     set({ changes: before.filter((x) => x.id !== c.id) });
-    offer('Change removed', async () => set({ changes: before }));
+    offer('Change removed', async () => set({ changes: before }), 'warn');
   }
   function clearAll() {
     const before = st.changes;
     set({ changes: [] });
-    offer('Changes cleared', async () => set({ changes: before }));
+    offer('Changes cleared', async () => set({ changes: before }), 'warn');
   }
 
   const two = (a: number[], b: number[]): Series[] => (has ? [{ name: 'With changes', values: a, cls: 's0' }, { name: 'As planned', values: b, cls: 's1' }] : [{ name: 'As planned', values: b, cls: 's0' }]);

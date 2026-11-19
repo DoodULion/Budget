@@ -1,3 +1,4 @@
+import { haptic } from './haptics';
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 
 const HOLD_MS = 400;
@@ -126,7 +127,7 @@ export function useHoldDrag(ids: string[], onReorder: (ids: string[]) => void, i
         } catch {
           /* pointer already gone */
         }
-        navigator.vibrate?.(12);
+        haptic();
       }, HOLD_MS),
     };
     startPoint.current = { x: e.clientX, y: e.clientY };
@@ -165,6 +166,7 @@ export function useHoldDrag(ids: string[], onReorder: (ids: string[]) => void, i
   function onPointerUp() {
     cancelPress();
     if (dragId) {
+      haptic();
       suppressClick.current = true;
       setTimeout(() => (suppressClick.current = false), 50);
       // Settle into the slot.

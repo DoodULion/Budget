@@ -43,7 +43,8 @@ function checkSettings(s: unknown): Settings {
     !isMonth(s.firstMonth) ||
     !Array.isArray(s.paidWith) ||
     !s.paidWith.every(isStr) ||
-    typeof s.setupDone !== 'boolean'
+    typeof s.setupDone !== 'boolean' ||
+    (s.saveAllLeft !== undefined && typeof s.saveAllLeft !== 'boolean')
   )
     fail('settings');
   return s as unknown as Settings;

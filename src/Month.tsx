@@ -58,7 +58,7 @@ export default function Month({ store, month, today }: { store: Store; month: Mo
     const before = row.payment;
     if (row.status === 'paid') {
       await store.setPayment(month, row.bill.id, unpaidMark(row));
-      offer(`${row.bill.name} marked unpaid`, () => store.setPayment(month, row.bill.id, before));
+      offer(`${row.bill.name} marked unpaid`, () => store.setPayment(month, row.bill.id, before), 'warn');
     } else {
       const date = isThisMonth ? today : `${month}-01`;
       await store.setPayment(month, row.bill.id, { datePaid: date });
@@ -431,7 +431,7 @@ function BillSheet({ store, month, row, today, onClose }: { store: Store; month:
   async function unmark() {
     const before = row.payment;
     await store.setPayment(month, row.bill.id, row.bill.autoPay ? { skipped: true } : undefined);
-    offer(`${row.bill.name} marked unpaid`, () => store.setPayment(month, row.bill.id, before));
+    offer(`${row.bill.name} marked unpaid`, () => store.setPayment(month, row.bill.id, before), 'warn');
     onClose();
   }
 
