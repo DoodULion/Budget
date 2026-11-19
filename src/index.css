@@ -870,3 +870,8 @@ html[data-nav] .band-in { animation: none; } /* the whole screen is already slid
 
 .debt-row.sum-card.lifted { background: var(--sign); border-radius: 14px; padding: 0 8px; }
 .debt-list.dragging .debt-row:not(.lifted) { opacity: 0.85; }
+
+/* a long debt name or a status pill wraps inside the heading; the ⋮ stays at the right */
+.card-head:has(> .more) { flex-wrap: nowrap; align-items: flex-start; }
+.card-head:has(> .more) > h2 { min-width: 0; flex: 1; }
+.card-head:has(> .more) > .more { flex: none; }

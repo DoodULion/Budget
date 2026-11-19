@@ -83,7 +83,7 @@ export default function Cards({ store, today }: { store: Store; today: string })
           {one ? (
             <CardDetail key={one.card.id} mode="manage" s={one} categories={categories} today={today} onEdit={() => setEditing(one.card)} onMenu={() => setMenu(one.card)} onPay={(payment) => setPaying({ card: one.card, payment })} />
           ) : (
-            <DebtList summaries={summaries} colorFor={colorFor} onReorder={setDebtOrder} onOpen={(id) => setSel(id)} />
+            <DebtList summaries={summaries} colorFor={colorFor} onReorder={setDebtOrder} onOpen={(id) => setSel(id)} onMenu={setMenu} />
           )}
           <button type="button" className="add-row" onClick={() => setEditing('new')}>
             <Icon name="add" />
@@ -260,7 +260,7 @@ function Overview({ summaries, colorFor, today, onOpen }: { summaries: CardSumma
 }
 
 /** The Debt tab's list: what is owed on each debt with its minimum payment and interest rate. */
-function DebtList({ summaries, colorFor, onReorder, onOpen }: { summaries: CardSummary[]; colorFor: (id: string) => string; onReorder: (ids: string[]) => void; onOpen: (id: string) => void }) {
+function DebtList({ summaries, colorFor, onReorder, onOpen, onMenu }: { summaries: CardSummary[]; colorFor: (id: string) => string; onReorder: (ids: string[]) => void; onOpen: (id: string) => void; onMenu: (card: CreditCard) => void }) {
   // The cards rearrange by hold-and-drag, and so do the debts inside the list (a press on a debt belongs to the debt).
   const { drag, grid } = useArrange('debt-list', ['total', 'list'], '.more, .debt-row');
   const rows = useHoldDrag(
@@ -326,6 +326,9 @@ function DebtList({ summaries, colorFor, onReorder, onOpen }: { summaries: CardS
                     .filter(Boolean)
                     .join(' · ')}
                 </span>
+              </button>
+              <button type="button" className="more" onClick={() => onMenu(s.card)} aria-label={`Options for ${s.card.name}`} aria-haspopup="dialog">
+                <Icon name="dots" />
               </button>
             </li>
           ))}
