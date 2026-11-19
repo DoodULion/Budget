@@ -864,3 +864,9 @@ html[data-nav] .band-in { animation: none; } /* the whole screen is already slid
 .preview { padding: 6px 0; }
 /* the tab's own name in the band (Analytics, Debt, Setup): the same size and place as the month title, with matching height */
 .band-name { min-height: 44px; display: grid; place-items: center; }
+
+.sort-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 12px; margin: 0 0 2px -12px; border: 0; background: none; color: var(--mute); font: inherit; font-weight: 700; font-size: 0.9rem; }
+.sort-btn .ic { width: 16px; height: 16px; }
+
+.debt-row.sum-card.lifted { background: var(--sign); border-radius: 14px; padding: 0 8px; }
+.debt-list.dragging .debt-row:not(.lifted) { opacity: 0.85; }

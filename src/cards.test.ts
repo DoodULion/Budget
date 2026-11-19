@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Month, Purchase } from './calc';
 import { autopayMonths, type Data } from './calc';
-import { cardMonths, cardSummary, debtBill, debtBillChanges, groupDebtBills, interestSaved, isPaidOff, minimumFor, paidOffIds, debtLabel, formatApr, isLoan, linkedBills, parseApr, payoff, payoffForMonth, projection, totalSeries, type CreditCard } from './cards';
+import { cardMonths, cardSummary, debtBill, debtBillChanges, groupDebtBills, sortBillItems, interestSaved, isPaidOff, minimumFor, paidOffIds, debtLabel, formatApr, isLoan, linkedBills, parseApr, payoff, payoffForMonth, projection, totalSeries, type CreditCard } from './cards';
 
 // Made-up figures only.
 const card: CreditCard = {
@@ -367,5 +367,26 @@ describe('combining debt bills of the same type', () => {
   it('leaves a lone debt bill, and bills that pay nothing, as plain rows', () => {
     const items = groupDebtBills([row('pa', 'a', 'paid'), row('car', 'c', 'paid'), row('x', 'gone', 'unpaid')], debts);
     expect(items.every((i) => i.kind === 'bill')).toBe(true);
+  });
+});
+
+describe('sorting the bills', () => {
+  const row = (id: string, name: string, status: 'paid' | 'unpaid' | 'ended', amount: number, cardId?: string, counted = status === 'paid' ? amount : 0) => ({ bill: { id, name, amountCents: amount, cardId }, amountCents: amount, status, countedCents: counted });
+  const debts: CreditCard[] = ['a', 'b'].map((id) => ({ id, name: id, aprBps: 0, startBalanceCents: 0, startMonth: '2027-01', payments: [] }));
+  const rows = [row('rent', 'Rent', 'paid', 120_000), row('gym', 'gym', 'ended', 3_000), row('pa', 'Zed card payment', 'unpaid', 2_000, 'a'), row('phone', 'Phone', 'unpaid', 5_000), row('pb', 'Amex payment', 'paid', 4_000, 'b', 4_500)];
+  const names = (by: Parameters<typeof sortBillItems>[1]) =>
+    sortBillItems(groupDebtBills(rows, debts), by).map((i) => (i.kind === 'bill' ? i.row.bill.id : `${i.label}[${i.rows.map((r) => r.bill.id).join(',')}]`));
+
+  it('keeps the setup order by default', () => {
+    expect(names('setup')).toEqual(['rent', 'gym', 'Credit cards[pa,pb]', 'phone']);
+  });
+  it('sorts by name, groups by their label, ignoring case', () => {
+    expect(names('name')).toEqual(['Credit cards[pb,pa]', 'gym', 'phone', 'rent']);
+  });
+  it('sorts by the amount shown, largest first, a group by its total', () => {
+    expect(names('amount')).toEqual(['rent', 'Credit cards[pb,pa]', 'phone', 'gym']); // the group is $45 paid + $20 unpaid = $65, above Phone's $50
+  });
+  it('puts unpaid first, then paid, then ended, keeping the order within each', () => {
+    expect(names('status')).toEqual(['Credit cards[pa,pb]', 'phone', 'rent', 'gym']);
   });
 });
