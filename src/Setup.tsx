@@ -5,6 +5,7 @@ import {
   formatCents,
   freedUpCents,
   leftForSpendingCents,
+  leftoverCents,
   monthLabel,
   spendingBudgetCents,
   thisMonth,
@@ -58,7 +59,7 @@ function Step({ n }: { n?: number }) {
 
 /* ---------- plan ---------- */
 
-function PlanMoney({ label, value, onSave, hint }: { label: string; value: number; onSave: (cents: number) => Promise<void>; hint?: string }) {
+function PlanMoney({ label, value, onSave, hint, fill }: { label: string; value: number; onSave: (cents: number) => Promise<void>; hint?: string; fill?: { label: (amount: string) => string; done: string; cents: number } }) {
   const [text, setText] = useState(value ? centsToAmountInput(value) : '');
   const parsed = parseCents(text);
   const bad = text.trim() !== '' && parsed === undefined;
@@ -76,6 +77,19 @@ function PlanMoney({ label, value, onSave, hint }: { label: string; value: numbe
         }}
       />
       {bad ? <small className="error">Enter an amount like 4,000</small> : hint ? <small className="muted small">{hint}</small> : null}
+      {fill && (
+        <button
+          type="button"
+          className="fill-btn"
+          disabled={fill.cents <= 0 || fill.cents === value}
+          onClick={() => {
+            setText(centsToAmountInput(fill.cents));
+            void onSave(fill.cents);
+          }}
+        >
+          {fill.cents === value ? fill.done : fill.label(formatCents(Math.max(0, fill.cents)))}
+        </button>
+      )}
     </label>
   );
 }
@@ -88,6 +102,7 @@ function PlanCard({ store, today, step }: { store: Store; today: string; step?: 
   const budget = spendingBudgetCents(store.data.categories);
   const tooHigh = budgetTooHigh(store.data, month);
   const freed = freedUpCents(store.data.bills);
+  const leftover = leftoverCents(store.data, month);
 
   return (
     <section className="card" aria-labelledby="plan-h">
@@ -98,7 +113,13 @@ function PlanCard({ store, today, step }: { store: Store; today: string; step?: 
       <div className="tripform">
         <PlanMoney label="Monthly income" value={settings.incomeBaselineCents} onSave={(c) => save({ incomeBaselineCents: c })} hint="What you plan on. A month you don't enter income for uses this." />
         <div className="grid2">
-          <PlanMoney label="Save each month" value={settings.savingsGoalCents} onSave={(c) => save({ savingsGoalCents: c })} />
+          <PlanMoney
+            key={settings.savingsGoalCents}
+            label="Save each month"
+            value={settings.savingsGoalCents}
+            onSave={(c) => save({ savingsGoalCents: c })}
+            fill={{ label: (a) => `Use the ${a} left`, done: 'Saving all that’s left', cents: leftover }}
+          />
           <PlanMoney label="Checking balance now" value={settings.startingBalanceCents} onSave={(c) => save({ startingBalanceCents: c })} />
         </div>
         <label className="field">

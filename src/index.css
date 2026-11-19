@@ -561,6 +561,8 @@ html[data-nav] .band-in { animation: none; } /* the whole screen is already slid
 .cat-list li { display: flex; align-items: center; gap: 10px; min-height: 44px; border-bottom: 1.5px solid var(--line); font-weight: 700; }
 .cat-list li:last-child { border-bottom: 0; }
 .cat-list li span:not(.rd) { flex: 1; }
+.fill-btn { align-self: flex-start; border: 0; background: none; color: var(--or); font: inherit; font-size: 15px; font-weight: 800; min-height: 44px; padding: 0 2px; text-align: left; }
+.fill-btn:disabled { color: var(--mute); }
 .link-danger { border: 0; background: none; color: var(--red); font: inherit; font-weight: 800; min-height: 44px; padding: 0 4px; }
 
 /* Stats: one column on a phone; on wide screens Rates beside Cash, How you paid beside Days */

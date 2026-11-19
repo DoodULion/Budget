@@ -323,6 +323,11 @@ export function leftForSpendingCents(data: Data, month: MonthKey): Cents {
   return data.settings.incomeBaselineCents - bills - data.settings.savingsGoalCents;
 }
 
+/** Income baseline minus bills active that month minus the category budgets: the most the savings goal can be. */
+export function leftoverCents(data: Data, month: MonthKey): Cents {
+  return leftForSpendingCents(data, month) + data.settings.savingsGoalCents - spendingBudgetCents(data.categories);
+}
+
 /** True when the category budgets add up to more than Left for spending that month. */
 export function budgetTooHigh(data: Data, month: MonthKey): boolean {
   return spendingBudgetCents(data.categories) > leftForSpendingCents(data, month);

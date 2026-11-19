@@ -9,6 +9,7 @@ import {
   formatCents,
   freedUpCents,
   leftForSpendingCents,
+  leftoverCents,
   monthLabel,
   monthRange,
   monthSummary,
@@ -147,6 +148,9 @@ describe('planning', () => {
     const d = data();
     expect(leftForSpendingCents(d, '2027-01')).toBe(122_000);
     expect(leftForSpendingCents(d, '2027-02')).toBe(125_000);
+    // Left over after bills and budgets: what "Use what's left" puts in the savings goal.
+    expect(leftoverCents(d, '2027-01')).toBe(117_000);
+    expect(leftoverCents(d, '2027-02')).toBe(120_000);
     expect(budgetTooHigh(d, '2027-01')).toBe(false);
     expect(budgetTooHigh(d, '2027-02')).toBe(false);
   });
