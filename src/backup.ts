@@ -94,6 +94,7 @@ export function parseBackup(text: string): Data {
         (c.dueDay === undefined || (Number.isInteger(c.dueDay) && (c.dueDay as number) >= 1 && (c.dueDay as number) <= 31)) &&
         (c.paidOffDate === undefined || isDate(c.paidOffDate)) &&
         optInt(c.interestSavedCents) &&
+        (c.resetDate === undefined || isDate(c.resetDate)) &&
         Array.isArray(c.payments) &&
         c.payments.every((p) => isObj(p) && isStr(p.id) && isDate(p.date) && isInt(p.amountCents)),
     ),

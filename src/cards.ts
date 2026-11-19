@@ -67,6 +67,11 @@ export interface CreditCard {
   paidOffDate?: DateKey;
   /** Interest saved by paying off early instead of making only the minimum, worked out when "Pay off balance" was recorded. */
   interestSavedCents?: Cents;
+  /**
+   * The day the balance was reset to a new amount ("Reset balances"): `startBalanceCents` is what was owed that day and
+   * `startMonth` is its month. Purchases and payments dated on or before it are already in that amount, so they are left out.
+   */
+  resetDate?: DateKey;
   payments: CardPayment[];
 }
 
@@ -89,6 +94,9 @@ export function monthlyInterestCents(balanceCents: Cents, aprBps: number): Cents
 }
 
 /** The purchases charged to this card (by its Paid with name). */
+/** After the reset (if any): purchases and payments dated on or before the reset day are already in the reset balance. */
+const afterReset = (card: Pick<CreditCard, 'resetDate'>) => (x: { date: DateKey }) => card.resetDate === undefined || x.date > card.resetDate;
+
 export function cardCharges(card: Pick<CreditCard, 'name' | 'kind'>, purchases: Purchase[]): Purchase[] {
   if (isLoan(card)) return [];
   return purchases.filter((p) => p.paidWith === card.name);
@@ -98,9 +106,9 @@ export function cardCharges(card: Pick<CreditCard, 'name' | 'kind'>, purchases: 
 export function cardMonths(card: CreditCard, purchases: Purchase[], today: DateKey, extraPayments: CardPayment[] = []): CardMonth[] {
   const now = monthOf(today);
   const charges = new Map<MonthKey, Cents>();
-  for (const p of cardCharges(card, purchases)) charges.set(monthOf(p.date), (charges.get(monthOf(p.date)) ?? 0) + p.amountCents);
+  for (const p of cardCharges(card, purchases).filter(afterReset(card))) charges.set(monthOf(p.date), (charges.get(monthOf(p.date)) ?? 0) + p.amountCents);
   const paid = new Map<MonthKey, Cents>();
-  for (const p of [...card.payments, ...extraPayments]) paid.set(monthOf(p.date), (paid.get(monthOf(p.date)) ?? 0) + p.amountCents);
+  for (const p of [...card.payments, ...extraPayments].filter(afterReset(card))) paid.set(monthOf(p.date), (paid.get(monthOf(p.date)) ?? 0) + p.amountCents);
 
   const rows: CardMonth[] = [];
   let opening = card.startBalanceCents;
@@ -219,7 +227,7 @@ export function cardSummary(card: CreditCard, purchases: Purchase[], today: Date
   const payoffPaymentCents = card.plannedPaymentCents || linked.billAmountCents || avgPaymentCents || undefined;
 
   const cats = new Map<string, Cents>();
-  for (const p of cardCharges(card, purchases)) {
+  for (const p of cardCharges(card, purchases).filter(afterReset(card))) {
     if (!p.date.startsWith(year) || monthOf(p.date) < card.startMonth || monthOf(p.date) > now) continue;
     cats.set(p.categoryId, (cats.get(p.categoryId) ?? 0) + p.amountCents);
   }
@@ -247,7 +255,7 @@ export function cardSummary(card: CreditCard, purchases: Purchase[], today: Date
     payoffPaymentCents,
     payoffUsesAverage: !card.plannedPaymentCents && !linked.billAmountCents && !!avgPaymentCents,
     payoffUsesBill: !card.plannedPaymentCents && !!linked.billAmountCents,
-    billPayments: linked.payments,
+    billPayments: linked.payments.filter(afterReset(card)),
     payoff: card.payInFull && !closed && !isLoan(card) ? { kind: 'full' } : payoff(balanceNowCents, card.aprBps, payoffPaymentCents, now),
     byCategory: [...cats].map(([categoryId, cents]) => ({ categoryId, cents })).sort((a, b) => b.cents - a.cents),
   };
@@ -433,6 +441,23 @@ export function sortBillItems(items: BillItem[], by: BillSort): BillItem[] {
   };
   const inner = items.map((it) => (it.kind === 'group' ? { ...it, rows: [...it.rows].sort(cmpRows) } : it));
   return inner.map((it, i) => ({ it, i })).sort((a, b) => cmp(a.it, b.it) || a.i - b.i).map((x) => x.it);
+}
+
+/**
+ * Start a debt over at the balance owed today ("Reset balances"). Everything else about it (APR, minimum, due date,
+ * limit, switches) stays. Its months now start with today's month, opening at that balance; purchases and payments dated
+ * today or earlier are part of it and no longer counted, and payments entered on the debt up to today are cleared.
+ * A loan or closed account reset to zero counts as paid off (as does a debt already paid off); a reset to an amount owed clears an earlier payoff.
+ */
+export function resetDebt(card: CreditCard, balanceCents: Cents, today: DateKey): CreditCard {
+  const next: CreditCard = { ...card, startBalanceCents: balanceCents, startMonth: monthOf(today), resetDate: today, payments: card.payments.filter((p) => p.date > today) };
+  if (balanceCents > 0) {
+    delete next.paidOffDate;
+    delete next.interestSavedCents;
+  } else if (!next.paidOffDate && (isLoan(card) || (card.closedMonth !== undefined && card.closedMonth <= monthOf(today)))) {
+    next.paidOffDate = today;
+  }
+  return next;
 }
 
 /** The id of the fixed bill that carries a debt's minimum payment. */

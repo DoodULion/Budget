@@ -1,5 +1,5 @@
 import { Fragment, useState, type JSX } from 'react';
-import { cardSummary, DEBT_KINDS, debtBillId, interestSaved, isPaidOff, minimumFor, debtLabel, formatApr, isLoan, linkedBills, type DebtKind, monthlyInterestCents, parseApr, payoff, projection, totalSeries, type CardPayment, type CardSummary, type CreditCard } from './cards';
+import { cardSummary, DEBT_KINDS, debtBillId, interestSaved, isPaidOff, minimumFor, debtLabel, formatApr, isLoan, linkedBills, type DebtKind, monthlyInterestCents, parseApr, payoff, projection, resetDebt, totalSeries, type CardPayment, type CardSummary, type CreditCard } from './cards';
 import { formatCents, monthLabel, type Category, type MonthKey } from './calc';
 import Icon from './icons';
 import { centsToAmountInput, dayLabel, newId, ordinal, parseCents } from './money';
@@ -43,6 +43,7 @@ export default function Cards({ store, today }: { store: Store; today: string })
   const [paying, setPaying] = useState<{ card: CreditCard; payment?: CardPayment } | null>(null);
   const [menu, setMenu] = useState<CreditCard | null>(null);
   const [payingOff, setPayingOff] = useState<CardSummary | null>(null);
+  const [resetting, setResetting] = useState(false);
   const [debtOrder, setDebtOrder] = useDebtOrder(cards);
   const { sorted: summaries, colorFor } = arrange(
     cards,
@@ -89,6 +90,9 @@ export default function Cards({ store, today }: { store: Store; today: string })
             <Icon name="add" />
             Add a debt
           </button>
+          <button type="button" className="reset-row" onClick={() => setResetting(true)}>
+            Reset balances
+          </button>
         </>
       )}
       {editing && <CardSheet store={store} card={editing === 'new' ? undefined : editing} today={today} onClose={() => setEditing(null)} onSaved={(c) => setSel(c.id)} />}
@@ -122,6 +126,7 @@ export default function Cards({ store, today }: { store: Store; today: string })
           </div>
         </SheetBackdrop>
       )}
+      {resetting && <ResetSheet store={store} summaries={summaries} today={today} onClose={() => setResetting(false)} />}
       {payingOff && <PayoffSheet store={store} s={payingOff} today={today} onClose={() => setPayingOff(null)} />}
       {paying && <PaymentSheet store={store} card={paying.card} payment={paying.payment} today={today} onClose={() => setPaying(null)} />}
     </div>
@@ -1149,6 +1154,89 @@ function PayoffSheet({ store, s, today, onClose }: { store: Store; s: CardSummar
         <div className="sheet-actions">
           <button type="submit" className="primary" disabled={s.balanceNowCents <= 0}>
             Record payoff
+          </button>
+          <button type="button" className="secondary" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </SheetBackdrop>
+  );
+}
+
+/**
+ * Reset balances: after a confirm, every debt is listed with what the app has it owing now, and the amounts typed in
+ * become each debt's balance as of today. APRs, minimums, due dates and the rest stay as they are.
+ */
+function ResetSheet({ store, summaries, today, onClose }: { store: Store; summaries: CardSummary[]; today: string; onClose: () => void }) {
+  const { offer } = useUndo();
+  const [confirmed, setConfirmed] = useState(false);
+  const [amounts, setAmounts] = useState<Record<string, string>>(() => Object.fromEntries(summaries.map((s) => [s.card.id, centsToAmountInput(Math.max(0, s.balanceNowCents))])));
+  const [tried, setTried] = useState(false);
+  const parsed = summaries.map((s) => ({ s, cents: parseCents(amounts[s.card.id] ?? '') }));
+  const missing = parsed.filter((x) => x.cents === undefined).map((x) => x.s.card.name);
+
+  async function save() {
+    setTried(true);
+    if (missing.length) return;
+    const before = summaries.map((s) => s.card);
+    for (const { s, cents } of parsed) await store.saveCard(resetDebt(s.card, cents ?? 0, today));
+    offer(`Balances reset for ${dayLabel(today)}`, async () => {
+      for (const c of before) await store.saveCard(c);
+    });
+    onClose();
+  }
+
+  if (!confirmed) {
+    return (
+      <SheetBackdrop onClose={onClose}>
+        <div className="sheet menu" role="alertdialog" aria-modal="true" aria-label="Confirm reset balances">
+          <h2>Reset all balances?</h2>
+          <p className="muted small">
+            You'll enter what you owe on each debt today, and each one starts fresh from that amount. Its earlier months, interest and payments are cleared. APRs, minimum payments, due dates,
+            limits and your fixed bills stay as they are.
+          </p>
+          <button type="button" className="danger armed" onClick={() => setConfirmed(true)}>
+            Reset balances
+          </button>
+          <button type="button" className="secondary" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </SheetBackdrop>
+    );
+  }
+
+  return (
+    <SheetBackdrop onClose={onClose}>
+      <form
+        className="sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reset-h"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        <h2 id="reset-h">Balances as of {dayLabel(today)}</h2>
+        <p className="muted small">Each amount starts filled in with what the app has now. Change any that differ from your statements or lender.</p>
+        <div className="reset-list">
+          {parsed.map(({ s, cents }) => (
+            <label key={s.card.id} className="field reset-item">
+              <span>
+                {s.card.name}
+                <small className="muted">{debtLabel(s.card)}{s.card.aprBps ? ` · ${formatApr(s.card.aprBps)} APR` : ''}</small>
+              </span>
+              <MoneyInput value={amounts[s.card.id] ?? ''} onValue={(v) => setAmounts((a) => ({ ...a, [s.card.id]: v }))} placeholder="0.00" />
+              {tried && cents === undefined && <small className="error" role="alert">Enter an amount (0 if nothing is owed)</small>}
+            </label>
+          ))}
+        </div>
+        <div className="sheet-actions">
+          <button type="submit" className="primary">
+            Start fresh
           </button>
           <button type="button" className="secondary" onClick={onClose}>
             Cancel

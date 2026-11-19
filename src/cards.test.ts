@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Month, Purchase } from './calc';
 import { autopayMonths, type Data } from './calc';
-import { cardMonths, cardSummary, debtBill, debtBillChanges, groupDebtBills, sortBillItems, interestSaved, isPaidOff, minimumFor, paidOffIds, debtLabel, formatApr, isLoan, linkedBills, parseApr, payoff, payoffForMonth, projection, totalSeries, type CreditCard } from './cards';
+import { cardMonths, cardSummary, debtBill, debtBillChanges, groupDebtBills, sortBillItems, interestSaved, isPaidOff, minimumFor, paidOffIds, debtLabel, formatApr, isLoan, linkedBills, parseApr, payoff, payoffForMonth, projection, resetDebt, totalSeries, type CreditCard } from './cards';
 
 // Made-up figures only.
 const card: CreditCard = {
@@ -388,5 +388,31 @@ describe('sorting the bills', () => {
   });
   it('puts unpaid first, then paid, then ended, keeping the order within each', () => {
     expect(names('status')).toEqual(['Credit cards[pa,pb]', 'phone', 'rent', 'gym']);
+  });
+});
+
+describe('resetting balances', () => {
+  // Made-up: the Test Visa above, reset to $500.00 owed on 2027-03-10 (today 2027-03-15).
+  const reset = resetDebt(card, 50_000, '2027-03-10');
+  it('keeps everything but the balance', () => {
+    expect(reset).toMatchObject({ aprBps: 2400, limitCents: 500_000, plannedPaymentCents: 5_000, startBalanceCents: 50_000, startMonth: '2027-03', resetDate: '2027-03-10', payments: [] });
+  });
+  it('starts the months over at the new balance, leaving out purchases up to the reset day', () => {
+    const rows = cardMonths(reset, [...purchases, buy('g', '2027-03-12', 2_500)], today);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ month: '2027-03', openingCents: 50_000, chargesCents: 2_500, paymentsCents: 0, closingCents: 52_500 });
+  });
+  it('counts payments after the reset day, including from a linked bill', () => {
+    const later = { ...reset, payments: [{ id: 'x', date: '2027-03-14', amountCents: 10_000 }] };
+    const extra = [{ id: 'b1', date: '2027-03-05', amountCents: 9_999 }, { id: 'b2', date: '2027-03-11', amountCents: 5_000 }];
+    expect(cardMonths(later, purchases, today, extra)[0]).toMatchObject({ paymentsCents: 15_000, closingCents: 35_000 });
+  });
+  it('clears a payoff when the debt owes again, and a loan reset to zero is paid off', () => {
+    expect(resetDebt({ ...card, paidOffDate: '2027-02-01', interestSavedCents: 264 }, 10_000, '2027-03-10')).not.toHaveProperty('paidOffDate');
+    const loan: CreditCard = { id: 'l', kind: 'auto-loan', name: 'Car loan', aprBps: 600, startBalanceCents: 1_000_000, startMonth: '2027-01', minPaymentCents: 30_000, payments: [] };
+    const zero = resetDebt(loan, 0, '2027-03-10');
+    expect(zero.paidOffDate).toBe('2027-03-10');
+    expect(isPaidOff(zero, cardSummary(zero, [], today))).toBe(true);
+    expect(isPaidOff(resetDebt(card, 0, '2027-03-10'), cardSummary(resetDebt(card, 0, '2027-03-10'), [], today))).toBe(false);
   });
 });

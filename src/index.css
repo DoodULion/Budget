@@ -875,3 +875,10 @@ html[data-nav] .band-in { animation: none; } /* the whole screen is already slid
 .card-head:has(> .more) { flex-wrap: nowrap; align-items: flex-start; }
 .card-head:has(> .more) > h2 { min-width: 0; flex: 1; }
 .card-head:has(> .more) > .more { flex: none; }
+
+/* Debt: Reset balances (a quiet text button under Add a debt, and the list of amounts in its sheet) */
+.reset-row { display: block; margin: 4px auto 0; min-height: 44px; padding: 0 12px; border: 0; background: none; color: var(--mute); font: inherit; font-weight: 800; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 4px; }
+.reset-list { display: flex; flex-direction: column; gap: 12px; margin: 12px 0 4px; }
+.reset-item > span { display: flex; flex-direction: column; gap: 1px; color: var(--ink); }
+.reset-item > span small { font-weight: 600; font-size: 0.8rem; }
+.reset-item .error { margin: 0; font-size: 0.85rem; }
