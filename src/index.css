@@ -976,3 +976,32 @@ input[type="date"] { padding-left: 10px; padding-right: 8px; font-size: 1rem; }
 /* switches: the off track stays visible on dark cards */
 .switch-row i { background: color-mix(in srgb, var(--ink) 18%, var(--field)); }
 .switch-row.on i { background: var(--fill); }
+
+/* ---------- Spend simulator ---------- */
+.sim .field-label { margin: 14px 0 6px; font-size: 0.85rem; color: var(--mute); font-weight: 700; }
+.sim .seg + .muted.small { margin-top: 10px; }
+.sim-changes { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; }
+.sim-changes li { display: flex; align-items: center; gap: 8px; border-bottom: 1.5px solid var(--line); }
+.sim-changes li:last-child { border-bottom: 0; }
+.sim-changes .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; text-align: left; background: none; border: 0; color: var(--ink); font: inherit; padding: 10px 0; min-height: 56px; }
+.sim-changes .main b { font-weight: 800; overflow-wrap: anywhere; }
+.sim-changes .main span { font-size: 0.85rem; color: var(--mute); font-weight: 600; }
+.sim-run { width: 100%; margin-top: 10px; }
+.sim-kinds { list-style: none; margin: 0 0 4px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.sim-kinds button { width: 100%; display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 12px 14px; min-height: 56px; border-radius: var(--r-row, 14px); border: 1.5px solid var(--line); background: var(--sign); color: var(--ink); font: inherit; }
+.sim-kinds b { font-weight: 800; }
+.sim-kinds span { font-size: 0.85rem; color: var(--mute); font-weight: 600; }
+.sim-debts { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.sim-debts li { display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; border-bottom: 1.5px solid var(--line); }
+.sim-debts b { font-weight: 800; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sim-debts span { font-size: 0.85rem; color: var(--mute); font-weight: 600; }
+.sim-debts em { font-style: normal; font-weight: 800; }
+.sim-by { margin-top: 12px; }
+.sim-res-kicker { margin: 0 0 2px; }
+.sim-res-hero { margin: 10px 0 4px; }
+.sim-res-hero h3 { margin: 0; font-size: 1rem; font-weight: 800; }
+.sim-res-hero .big { margin: 2px 0; }
+.sim-res-hero p.muted { margin: 0; font-weight: 700; }
+.kv dd small.fig-pos { color: var(--good); }
+.kv dd small.fig-neg { color: var(--red); }
+.sim-res-warn { grid-column: 1 / -1; text-align: left; white-space: normal !important; }
