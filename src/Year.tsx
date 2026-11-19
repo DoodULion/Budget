@@ -77,12 +77,12 @@ export default function Year({ store, year, today }: { store: { data: import('./
         {y.categories.length === 0 ? (
           <p className="empty-line">No categories yet.</p>
         ) : (
-          <ul className="hbars">
+          <ul className="hbars stack">
             {(() => {
               const max = Math.max(1, ...y.categories.map((c) => c.totalCents));
               return y.categories.map((c) => (
                 <li key={c.category.id}>
-                  <span className="hb-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <span className="hb-label">
                     <CatTile category={c.category} small />
                     {c.category.name}
                   </span>
@@ -90,7 +90,7 @@ export default function Year({ store, year, today }: { store: { data: import('./
                   <span className="hb-track">
                     <i style={{ width: `${(c.totalCents / max) * 100}%`, ['--meter' as string]: `var(--cat-${c.category.color})` }} />
                   </span>
-                  <span className="st-sub" style={{ gridColumn: '1 / -1' }}>
+                  <span className="st-sub">
                     {formatCents(c.avgPerMonthCents)} a month on average · budget {formatCents(c.budgetCents)}
                   </span>
                 </li>

@@ -601,12 +601,12 @@ function CardDetail({
         {s.byCategory.length === 0 ? (
           <p className="empty-line">Purchases paid with {card.name} will show here.</p>
         ) : (
-          <ul className="hbars">
+          <ul className="hbars stack">
             {s.byCategory.map((c) => {
               const cat = categories.find((x) => x.id === c.categoryId);
               return (
                 <li key={c.categoryId}>
-                  <span className="hb-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <span className="hb-label">
                     <CatTile category={cat} small />
                     {cat?.name ?? '(deleted)'}
                   </span>
