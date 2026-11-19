@@ -10,8 +10,9 @@ declare const process: { env: Record<string, string | undefined> };
 // Locally (dev server, plain `npm run build`) it stays '/'.
 const base = process.env.VITE_BASE ?? '/';
 
-// Theme background colors (kept in step with index.html and src/theme.ts).
-const LIGHT_BG = '#eef1f5';
+// Theme background colors (kept in step with index.html, src/theme.ts and src/index.css).
+const LIGHT_BG = '#edf0f7';
+const SHELL = '#1d348f'; // the cobalt band and tab bar
 
 export default defineConfig(({ command, isPreview }) => ({
   // The dev server always serves from '/'. A build, and 'vite preview' of that build, use the Pages path.
@@ -29,7 +30,7 @@ export default defineConfig(({ command, isPreview }) => ({
         orientation: 'any',
         start_url: base,
         scope: base,
-        theme_color: LIGHT_BG,
+        theme_color: SHELL,
         background_color: LIGHT_BG,
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },

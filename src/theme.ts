@@ -6,7 +6,8 @@
 export type ThemeChoice = 'system' | 'light' | 'dark';
 
 const KEY = 'budget-tracker-theme';
-const COLORS = { light: '#eef1f5', dark: '#11161e' };
+// the status bar sits over the band, so it takes the shell color
+const COLORS = { light: '#1d348f', dark: '#16224f' };
 const media = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)') : undefined;
 
 export function getThemeChoice(): ThemeChoice {

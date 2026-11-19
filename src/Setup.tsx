@@ -506,7 +506,7 @@ export function CategorySheet({
           <div className="chips" role="radiogroup" aria-label="Category color">
             {CATEGORY_COLORS.map((k) => (
               <button key={k} type="button" role="radio" aria-checked={color === k} aria-label={`Color ${k.slice(1)}`} className={color === k ? 'on' : ''} onClick={() => setColor(k)}>
-                <CatTile category={{ name: name || '?', color: k }} small />
+                <CatTile category={{ name: name || '•', color: k }} small />
               </button>
             ))}
           </div>
