@@ -42,6 +42,8 @@ export interface Store {
   removeCategory: (id: string) => Promise<void>;
   setIncome: (month: MonthKey, incomeCents: number | undefined) => Promise<void>;
   setPayment: (month: MonthKey, billId: string, payment: BillPayment | undefined) => Promise<void>;
+  /** Save whole month records (used by autopay). */
+  putMonths: (months: Month[]) => Promise<void>;
   putPurchase: (purchase: Purchase) => Promise<void>;
   removePurchase: (id: string) => Promise<void>;
   replaceAll: (data: Data) => Promise<void>;
@@ -204,12 +206,17 @@ export function useStore(): AppState {
         update((d) => {
           const base = monthRecord(d, month);
           const payments = { ...base.payments };
-          if (payment && (payment.datePaid !== undefined || payment.amountPaidCents !== undefined)) payments[billId] = payment;
+          if (payment && (payment.datePaid !== undefined || payment.amountPaidCents !== undefined || payment.skipped)) payments[billId] = payment;
           else delete payments[billId];
           rec = { ...base, payments };
           return withMonth(d, rec);
         });
         if (rec) await db.putMonth(rec);
+      },
+      async putMonths(months: Month[]) {
+        if (months.length === 0) return;
+        update((d) => ({ ...d, months: [...d.months.filter((m) => !months.some((x) => x.month === m.month)), ...months] }));
+        await Promise.all(months.map(db.putMonth));
       },
       async putPurchase(purchase: Purchase) {
         update((d) => ({

@@ -14,12 +14,12 @@ function data(): Data {
       setupDone: true,
     },
     cards: [],
-    bills: [{ id: 'rent', name: 'Rent', amountCents: 120_000, lastMonth: '2027-06', cardId: 'v' }],
+    bills: [{ id: 'rent', name: 'Rent', amountCents: 120_000, lastMonth: '2027-06', cardId: 'v', autoPay: { day: 5, since: '2027-01' } }],
     categories: [
       { id: 'food', name: 'Food', budgetCents: 40_000, color: '#000' },
       { id: 'old', name: 'Old', budgetCents: 0, color: '#000', deleted: true },
     ],
-    months: [{ month: '2027-01', incomeCents: 290_000, payments: { rent: { datePaid: '2027-01-01' } } }],
+    months: [{ month: '2027-01', incomeCents: 290_000, payments: { rent: { datePaid: '2027-01-05', auto: true } } }, { month: '2027-02', payments: { rent: { skipped: true } } }],
     purchases: [
       { id: 'b', date: '2027-01-05', categoryId: 'food', amountCents: 1_250, description: 'Lunch, "deli"', paidWith: 'Card A' },
       { id: 'a', date: '2027-01-02', categoryId: 'gone', amountCents: 99, note: '=SUM(A1)' },
@@ -44,6 +44,12 @@ describe('JSON backup', () => {
   it('reads a backup made before the Cards tab (no cards)', () => {
     const { cards: _cards, ...old } = data();
     expect(parseBackup(JSON.stringify({ app: 'budget-tracker', version: 1, data: old })).cards).toEqual([]);
+  });
+
+  it('rejects damaged autopay settings', () => {
+    const d = data() as unknown as { bills: { autoPay: unknown }[] };
+    d.bills[0].autoPay = { day: 32, since: '2027-01' };
+    expect(() => parseBackup(JSON.stringify({ app: 'budget-tracker', version: 1, data: d }))).toThrow(/bills/);
   });
 
   it('rejects damaged cards', () => {

@@ -48,13 +48,15 @@ All data stays on the device in IndexedDB. No accounts, no backend and no networ
 - `firstMonth`: the first month tracked (`YYYY-MM`), chosen in setup (defaults to the current month).
 - `paidWith`: my list of payment methods (cards, cash, etc.), editable. Optional on a purchase.
 
-**Bill** (fixed monthly bills, my own list): `id`, `name`, `amountCents`, `lastMonth` (optional `YYYY-MM`: the bill ends after this month, e.g. a car loan's final payment), `note` (optional), `cardId` (optional: the credit card this bill pays). Changing a bill's amount applies to every month that has not recorded its own paid amount.
+**Bill** (fixed monthly bills, my own list): `id`, `name`, `amountCents`, `lastMonth` (optional `YYYY-MM`: the bill ends after this month, e.g. a car loan's final payment), `note` (optional), `cardId` (optional: the credit card this bill pays), `autoPay` (optional: `day` 1–31 and `since` month). Changing a bill's amount applies to every month that has not recorded its own paid amount.
 
 **Category** (spending categories, my own list): `id`, `name`, `budgetCents` (monthly budget), `color`, `hidden` (optional: not offered on Add). The first-run setup suggests names only (Food, Shopping, Entertainment, Misc) with empty budgets. A deleted category stops being offered but stays on past purchases and in their totals.
 
 **CreditCard** (my own list, kept in `cards`): `id`, `name` (also its **Paid with** name, which is how purchases link to it), `aprBps` (APR in hundredths of a percent: 24.99% is 2499), `startBalanceCents` and `startMonth` (what I owed at the start of that month), `limitCents` (optional), `plannedPaymentCents` (optional), `payInFull` (optional: paid off in full every month), `closedMonth` (optional: the account is closed from this month), and `payments`: `id`, `date`, `amountCents`. Adding a card adds its name to Paid with; renaming it renames the Paid with entry and every purchase tagged with it. Removing a card keeps the Paid with name and past purchases.
 
-**Month** (one per tracked month, created when first needed): `month` (`YYYY-MM`), `incomeCents` (optional: the income actually received; blank means the baseline), and per bill a `BillPayment`: `billId`, `datePaid` (optional), `amountPaidCents` (optional).
+**Month** (one per tracked month, created when first needed): `month` (`YYYY-MM`), `incomeCents` (optional: the income actually received; blank means the baseline), and per bill a `BillPayment`: `billId`, `datePaid` (optional), `amountPaidCents` (optional), `auto` (recorded by autopay), `skipped` (unmarked on purpose, so autopay leaves the month alone).
+
+**Autopay** (a switch on a bill, with a day of the month and a starting month): when the app is open on or after the autopay day, each active month from the starting month (never before the first tracked month) that has no payment entry yet gets the bill recorded as paid on that day (a short month uses its last day). The bill row says "Autopaid <date>". Unmarking an autopaid bill keeps a `skipped` entry so autopay doesn't put it back; marking it paid again replaces that. Autopaid bills count as paid everywhere, including a linked credit card's payments.
 
 **Purchase**: `id`, `date`, `categoryId`, `amountCents` (all required); `description`, `paidWith`, `note` (optional). Its month is the month of its date.
 
@@ -129,6 +131,7 @@ Expected:
 - Linked bill (made-up Old Card: APR 24%, start balance $1,000.00 in 2027-01, no purchases; a $200.00 bill linked to it, paid 01-05 for $200.00 and 02-06 with $250.00 paid, unpaid in Mar; today 2027-03-15): Jan interest $16.00, closing $816.00; Feb interest $11.32, closing $577.32; Mar closing $577.32; payoff at the bill's $200.00 is 3 payments ending 2027-05 with $11.25 of interest. Unmarking a month removes its payment.
 - Closed card (made-up: APR 24%, start balance $1,000.00 in 2027-01, closed since 2027-01, a $300.00 payment on 01-20, nothing else; today 2027-03-15): Jan interest $14.00, closing $714.00; Feb nothing paid, interest $14.28, closing $728.28; Mar (in progress) closing $728.28 with $14.57 projected interest.
 - Pay in full (same Test Visa with the switch on and no payments entered): Jan closing $250.00 (the $1,000.00 start and Jan's charges are paid, no interest), Feb closing $100.00, Mar closing $140.00; Credit Card payoff is $250.00 for Jan and $40.00 for Mar.
+- Autopay (Rent $1,200.00, autopay day 5 since 2027-01, no payments entered; today 2027-02-15): Jan and Feb are each recorded paid on the 5th; on 2027-02-04 only Jan is. Day 31 in Feb 2027 is the 28th. A month already holding a payment or a skipped entry is left alone.
 - Year: this month Feb 2027 (spent $470.00, budget left $80.00); saved to date $1,639.05; months goal met "1 of 2"; checking balance now $3,639.05.
 - Category averages over 2 started months: Food $315.38 (total $630.75), Fun $32.50, Other $5.00.
 - With today 2026-12-10 (before the first month): this month is Jan 2027, no months counted, months goal met "0 of 0", balance now $2,000.00.

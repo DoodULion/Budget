@@ -71,7 +71,7 @@ export function parseBackup(text: string): Data {
     bills: checkList<Bill>(
       d.bills,
       'bills',
-      (b) => isStr(b.id) && isStr(b.name) && isInt(b.amountCents) && (b.lastMonth === undefined || isMonth(b.lastMonth)) && optStr(b.note) && optStr(b.cardId),
+      (b) => isStr(b.id) && isStr(b.name) && isInt(b.amountCents) && (b.lastMonth === undefined || isMonth(b.lastMonth)) && optStr(b.note) && optStr(b.cardId) && (b.autoPay === undefined || (isObj(b.autoPay) && Number.isInteger(b.autoPay.day) && (b.autoPay.day as number) >= 1 && (b.autoPay.day as number) <= 31 && isMonth(b.autoPay.since))),
     ),
     // Backups made before the Cards tab have no cards.
     cards: d.cards === undefined ? [] : checkList<CreditCard>(
@@ -103,7 +103,7 @@ export function parseBackup(text: string): Data {
         optInt(m.incomeCents) &&
         isObj(m.payments) &&
         Object.values(m.payments).every(
-          (p) => isObj(p) && (p.datePaid === undefined || isDate(p.datePaid)) && optInt(p.amountPaidCents),
+          (p) => isObj(p) && (p.datePaid === undefined || isDate(p.datePaid)) && optInt(p.amountPaidCents) && (p.auto === undefined || typeof p.auto === 'boolean') && (p.skipped === undefined || typeof p.skipped === 'boolean'),
         ),
     ),
     purchases: checkList<Purchase>(

@@ -17,7 +17,7 @@ import {
 } from './calc';
 import { saveFile } from './download';
 import Icon from './icons';
-import { centsToAmountInput, newId, parseCents } from './money';
+import { centsToAmountInput, newId, parseCents, todayLocal } from './money';
 import SheetBackdrop from './SheetBackdrop';
 import type { Store } from './store';
 import { getThemeChoice, setThemeChoice, type ThemeChoice } from './theme';
@@ -132,6 +132,8 @@ function PlanCard({ store, today, step }: { store: Store; today: string; step?: 
 
 /* ---------- bills ---------- */
 
+const ordinal = (n: number) => (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');
+
 function BillsCard({ store, step }: { store: Store; step?: number }) {
   const bills = store.data.bills.filter((b) => !b.deleted);
   const [editing, setEditing] = useState<Bill | 'new' | null>(null);
@@ -153,7 +155,7 @@ function BillsCard({ store, step }: { store: Store; step?: number }) {
             <li key={b.id}>
               <button type="button" className="li-main li-tap" onClick={() => setEditing(b)} aria-label={`Edit ${b.name}`}>
                 <b>{b.name}</b>
-                <span>{[b.lastMonth ? `Last payment ${monthLabel(b.lastMonth)}` : 'Every month', store.data.cards.find((c) => c.id === b.cardId)?.name, b.note].filter(Boolean).join(' · ')}</span>
+                <span>{[b.lastMonth ? `Last payment ${monthLabel(b.lastMonth)}` : 'Every month', b.autoPay && `Autopay on the ${b.autoPay.day}${ordinal(b.autoPay.day)}`, store.data.cards.find((c) => c.id === b.cardId)?.name, b.note].filter(Boolean).join(' · ')}</span>
               </button>
               <span className="li-amt">{formatCents(b.amountCents)}</span>
               <button type="button" className="more" aria-label={`Edit ${b.name}`} aria-haspopup="dialog" onClick={() => setEditing(b)}>
@@ -178,11 +180,20 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
   const [ends, setEnds] = useState(bill?.lastMonth ?? '');
   const [note, setNote] = useState(bill?.note ?? '');
   const [cardId, setCardId] = useState(bill?.cardId ?? '');
+  const [auto, setAuto] = useState(bill?.autoPay !== undefined);
+  const [autoDay, setAutoDay] = useState(String(bill?.autoPay?.day ?? ''));
+  const [autoSince, setAutoSince] = useState(bill?.autoPay?.since ?? thisMonth(store.data.settings, todayLocal()));
   const [confirm, setConfirm] = useState(false);
   const [tried, setTried] = useState(false);
   const { offer } = useUndo();
   const cents = parseCents(amount);
-  const errors = [!name.trim() && 'Enter a name', (cents === undefined || cents === 0) && 'Enter the monthly amount'].filter(Boolean) as string[];
+  const dayNum = Number(autoDay);
+  const errors = [
+    !name.trim() && 'Enter a name',
+    (cents === undefined || cents === 0) && 'Enter the monthly amount',
+    auto && !(Number.isInteger(dayNum) && dayNum >= 1 && dayNum <= 31) && 'Enter the autopay day, 1 to 31',
+    auto && !/^\d{4}-(0[1-9]|1[0-2])$/.test(autoSince) && 'Pick the month autopay starts',
+  ].filter(Boolean) as string[];
 
   async function save() {
     setTried(true);
@@ -190,6 +201,7 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
     const next: Bill = { id: bill?.id ?? newId(), name: name.trim(), amountCents: cents };
     if (ends) next.lastMonth = ends;
     if (note.trim()) next.note = note.trim();
+    if (auto) next.autoPay = { day: dayNum, since: autoSince };
     if (cardId && store.data.cards.some((c) => c.id === cardId)) next.cardId = cardId;
     await store.putBill(next);
     if (bill) offer(`Saved ${next.name}`, () => store.putBill(bill));
@@ -247,6 +259,25 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
           <span>Last payment (optional)</span>
           <input type="month" value={ends} onChange={(e) => setEnds(e.target.value)} />
         </label>
+        <button type="button" role="switch" aria-checked={auto} className={`switch-row${auto ? ' on' : ''}`} onClick={() => setAuto(!auto)}>
+          <span>
+            <b>Autopay</b>
+            <small>Records this bill as paid on its day every month, no tapping.</small>
+          </span>
+          <i aria-hidden="true" />
+        </button>
+        {auto && (
+          <div className="grid2">
+            <label className="field">
+              <span>Day of the month</span>
+              <input type="text" inputMode="numeric" value={autoDay} onChange={(e) => setAutoDay(e.target.value.replace(/\D/g, '').slice(0, 2))} placeholder="1 to 31" autoComplete="off" />
+            </label>
+            <label className="field">
+              <span>Starting</span>
+              <input type="month" value={autoSince} onChange={(e) => setAutoSince(e.target.value)} />
+            </label>
+          </div>
+        )}
         {store.data.cards.length > 0 && (
           <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
             <span>Pays a credit card (optional)</span>

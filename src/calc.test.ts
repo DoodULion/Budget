@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   addMonths,
+  autopayDate,
+  autopayMonths,
   billRows,
   budgetTooHigh,
   checkingBalanceNowCents,
@@ -225,5 +227,67 @@ describe('helpers', () => {
     expect(formatCents(-5_000)).toBe('−$50.00');
     expect(formatCents(0)).toBe('$0.00');
     expect(monthLabel('2027-02')).toBe('Feb 2027');
+  });
+});
+
+describe('autopay', () => {
+  const base = (): Data => ({
+    ...data(),
+    bills: [{ id: 'rent', name: 'Rent', amountCents: 120_000, autoPay: { day: 5, since: '2027-01' } }],
+    months: [],
+  });
+
+  it('records a payment on the autopay day of every month that has reached it', () => {
+    const got = autopayMonths(base(), '2027-02-15');
+    expect(got.map((m) => [m.month, m.payments.rent])).toEqual([
+      ['2027-01', { datePaid: '2027-01-05', auto: true }],
+      ['2027-02', { datePaid: '2027-02-05', auto: true }],
+    ]);
+  });
+
+  it('waits for the day, and uses the last day of a short month', () => {
+    expect(autopayMonths(base(), '2027-02-04').map((m) => m.month)).toEqual(['2027-01']);
+    expect(autopayDate('2027-02', 31)).toBe('2027-02-28');
+    expect(autopayDate('2028-02', 31)).toBe('2028-02-29');
+  });
+
+  it('starts at the since month and never before the first tracked month', () => {
+    const d = base();
+    d.bills[0].autoPay = { day: 5, since: '2027-02' };
+    expect(autopayMonths(d, '2027-02-15').map((m) => m.month)).toEqual(['2027-02']);
+    d.bills[0].autoPay = { day: 5, since: '2026-06' };
+    expect(autopayMonths(d, '2027-02-15').map((m) => m.month)).toEqual(['2027-01', '2027-02']);
+  });
+
+  it('leaves months with a payment entry alone, including a skipped one', () => {
+    const d = base();
+    d.months = [
+      { month: '2027-01', payments: { rent: { datePaid: '2027-01-09', amountPaidCents: 100_000 } } },
+      { month: '2027-02', payments: { rent: { skipped: true } } },
+    ];
+    expect(autopayMonths(d, '2027-02-15')).toEqual([]);
+    expect(billRows(d, '2027-02')[0].status).toBe('unpaid');
+  });
+
+  it('keeps the other bills and records of a month it fills in', () => {
+    const d = base();
+    d.bills.push({ id: 'phone', name: 'Phone', amountCents: 5_000 });
+    d.months = [{ month: '2027-01', incomeCents: 290_000, payments: { phone: { datePaid: '2027-01-02' } } }];
+    const jan = autopayMonths(d, '2027-01-20')[0];
+    expect(jan).toEqual({ month: '2027-01', incomeCents: 290_000, payments: { phone: { datePaid: '2027-01-02' }, rent: { datePaid: '2027-01-05', auto: true } } });
+  });
+
+  it('skips ended and removed bills', () => {
+    const d = base();
+    d.bills[0].lastMonth = '2027-01';
+    expect(autopayMonths(d, '2027-02-15').map((m) => m.month)).toEqual(['2027-01']);
+    d.bills[0].deleted = true;
+    expect(autopayMonths(d, '2027-02-15')).toEqual([]);
+  });
+
+  it('counts an autopaid bill as paid in Bills paid', () => {
+    const d = base();
+    d.months = autopayMonths(d, '2027-01-20');
+    expect(billRows(d, '2027-01')[0]).toMatchObject({ status: 'paid', countedCents: 120_000 });
   });
 });

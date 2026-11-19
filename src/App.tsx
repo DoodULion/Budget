@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Add from './Add';
 import Cards from './Cards';
-import { addMonths, monthLabel, thisMonth, type MonthKey } from './calc';
+import { addMonths, autopayMonths, monthLabel, thisMonth, type MonthKey } from './calc';
 import Icon, { type IconName } from './icons';
 import Month from './Month';
 import PeriodSheet, { type Period } from './PeriodSheet';
@@ -52,6 +52,14 @@ function Main({ store, today }: { store: Store; today: string }) {
   const [year, setYear] = useState(Number(current.slice(0, 4)));
   const [picking, setPicking] = useState(false);
   const motion = useRef('');
+
+  // Autopay: record the payments of bills whose autopay date has arrived (safe to repeat: it only fills what is missing).
+  const { bills, months } = store.data;
+  useEffect(() => {
+    const due = autopayMonths({ ...store.data, bills, months }, today);
+    if (due.length) void store.putMonths(due);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [today, bills, months, settings.firstMonth]);
 
   function go(next: Tab) {
     if (next === tab) return;
