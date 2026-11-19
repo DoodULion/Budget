@@ -71,7 +71,7 @@ export function parseBackup(text: string): Data {
     bills: checkList<Bill>(
       d.bills,
       'bills',
-      (b) => isStr(b.id) && isStr(b.name) && isInt(b.amountCents) && (b.lastMonth === undefined || isMonth(b.lastMonth)) && optStr(b.note),
+      (b) => isStr(b.id) && isStr(b.name) && isInt(b.amountCents) && (b.lastMonth === undefined || isMonth(b.lastMonth)) && optStr(b.note) && optStr(b.cardId),
     ),
     // Backups made before the Cards tab have no cards.
     cards: d.cards === undefined ? [] : checkList<CreditCard>(

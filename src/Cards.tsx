@@ -1,5 +1,5 @@
 import { Fragment, useState, type JSX } from 'react';
-import { cardSummary, formatApr, monthlyInterestCents, parseApr, payoff, projection, totalSeries, type CardPayment, type CardSummary, type CreditCard } from './cards';
+import { cardSummary, formatApr, linkedBills, monthlyInterestCents, parseApr, payoff, projection, totalSeries, type CardPayment, type CardSummary, type CreditCard } from './cards';
 import { formatCents, monthLabel, type Category, type MonthKey } from './calc';
 import Icon from './icons';
 import { centsToAmountInput, dayLabel, newId, parseCents } from './money';
@@ -27,7 +27,7 @@ export default function Cards({ store, today }: { store: Store; today: string })
   const [sel, setSel] = useState('all');
   const [editing, setEditing] = useState<CreditCard | 'new' | null>(null);
   const [paying, setPaying] = useState<{ card: CreditCard; payment?: CardPayment } | null>(null);
-  const summaries = cards.map((c) => cardSummary(c, purchases, today));
+  const summaries = cards.map((c) => cardSummary(c, purchases, today, linkedBills(c, store.data, today)));
   const one = summaries.length === 1 ? summaries[0] : summaries.find((s) => s.card.id === sel);
 
   return (
@@ -243,7 +243,7 @@ function CardDetail({
   const proj = projection(s.balanceNowCents, card.aprBps, plan);
   const interestRow = s.rows.filter((r) => !r.current || r.interestCents > 0);
   const maxCat = Math.max(1, ...s.byCategory.map((c) => c.cents));
-  const payments = [...card.payments].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  const payments = [...card.payments, ...s.billPayments].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   const monthlyCost = monthlyInterestCents(owedNow, card.aprBps);
 
   const whatIf = (extra: number) => {
@@ -342,7 +342,7 @@ function CardDetail({
             <p className="big-sm">{monthLabel(s.payoff.lastMonth)}</p>
             <p className="muted">
               {s.payoff.months} payment{s.payoff.months === 1 ? '' : 's'} of {formatCents(plan ?? 0)}
-              {s.payoffUsesAverage ? ' (your average so far)' : ''} · about {formatCents(s.payoff.interestCents)} more interest, if nothing new is charged.
+              {s.payoffUsesBill ? ' (your linked bill)' : s.payoffUsesAverage ? ' (your average so far)' : ''} · about {formatCents(s.payoff.interestCents)} more interest, if nothing new is charged.
             </p>
             {[5_000, 10_000].map((extra) => {
               const w = whatIf(extra);
@@ -433,14 +433,21 @@ function CardDetail({
       <section {...drag('payments', 'card')} aria-labelledby="pm-h">
         <h2 id="pm-h">Payments</h2>
         {payments.length === 0 ? (
-          <p className="empty-line">No payments yet.</p>
+          <p className="empty-line">No payments yet. Mark a linked bill paid on Summary, or add one here.</p>
         ) : (
           <ul className="list-edit">
             {payments.slice(0, 8).map((p) => (
               <li key={p.id}>
-                <button type="button" className="li-main li-tap" onClick={() => onPay(p)} aria-label={`Edit payment on ${dayLabel(p.date)}`}>
-                  <b>{dayLabel(p.date)}</b>
-                </button>
+                {p.billName ? (
+                  <span className="li-main">
+                    <b>{dayLabel(p.date)}</b>
+                    <span>From the bill {p.billName}</span>
+                  </span>
+                ) : (
+                  <button type="button" className="li-main li-tap" onClick={() => onPay(p)} aria-label={`Edit payment on ${dayLabel(p.date)}`}>
+                    <b>{dayLabel(p.date)}</b>
+                  </button>
+                )}
                 <span className="li-amt">{formatCents(p.amountCents)}</span>
               </li>
             ))}

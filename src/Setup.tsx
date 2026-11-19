@@ -153,7 +153,7 @@ function BillsCard({ store, step }: { store: Store; step?: number }) {
             <li key={b.id}>
               <button type="button" className="li-main li-tap" onClick={() => setEditing(b)} aria-label={`Edit ${b.name}`}>
                 <b>{b.name}</b>
-                <span>{[b.lastMonth ? `Last payment ${monthLabel(b.lastMonth)}` : 'Every month', b.note].filter(Boolean).join(' · ')}</span>
+                <span>{[b.lastMonth ? `Last payment ${monthLabel(b.lastMonth)}` : 'Every month', store.data.cards.find((c) => c.id === b.cardId)?.name, b.note].filter(Boolean).join(' · ')}</span>
               </button>
               <span className="li-amt">{formatCents(b.amountCents)}</span>
               <button type="button" className="more" aria-label={`Edit ${b.name}`} aria-haspopup="dialog" onClick={() => setEditing(b)}>
@@ -177,6 +177,7 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
   const [amount, setAmount] = useState(bill ? centsToAmountInput(bill.amountCents) : '');
   const [ends, setEnds] = useState(bill?.lastMonth ?? '');
   const [note, setNote] = useState(bill?.note ?? '');
+  const [cardId, setCardId] = useState(bill?.cardId ?? '');
   const [confirm, setConfirm] = useState(false);
   const [tried, setTried] = useState(false);
   const { offer } = useUndo();
@@ -189,6 +190,7 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
     const next: Bill = { id: bill?.id ?? newId(), name: name.trim(), amountCents: cents };
     if (ends) next.lastMonth = ends;
     if (note.trim()) next.note = note.trim();
+    if (cardId && store.data.cards.some((c) => c.id === cardId)) next.cardId = cardId;
     await store.putBill(next);
     if (bill) offer(`Saved ${next.name}`, () => store.putBill(bill));
     else offer(`Added ${next.name}`, () => store.removeBill(next.id));
@@ -245,6 +247,22 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
           <span>Last payment (optional)</span>
           <input type="month" value={ends} onChange={(e) => setEnds(e.target.value)} />
         </label>
+        {store.data.cards.length > 0 && (
+          <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+            <span>Pays a credit card (optional)</span>
+            <div className="chips scroll-row" role="radiogroup" aria-label="Credit card this bill pays">
+              <button type="button" role="radio" aria-checked={cardId === ''} className={cardId === '' ? 'on' : ''} onClick={() => setCardId('')}>
+                None
+              </button>
+              {store.data.cards.map((c) => (
+                <button key={c.id} type="button" role="radio" aria-checked={cardId === c.id} className={cardId === c.id ? 'on' : ''} onClick={() => setCardId(c.id)}>
+                  {c.name}
+                </button>
+              ))}
+            </div>
+            <p className="muted small">When you mark this bill paid, the payment is recorded on that card automatically.</p>
+          </fieldset>
+        )}
         <label className="field">
           <span>Note (optional)</span>
           <input type="text" value={note} onChange={(e) => setNote(e.target.value)} autoComplete="off" />

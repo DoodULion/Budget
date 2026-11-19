@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Purchase } from './calc';
-import { cardMonths, cardSummary, formatApr, parseApr, payoff, payoffForMonth, projection, totalSeries, type CreditCard } from './cards';
+import type { Month, Purchase } from './calc';
+import { cardMonths, cardSummary, formatApr, linkedBills, parseApr, payoff, payoffForMonth, projection, totalSeries, type CreditCard } from './cards';
 
 // Made-up figures only.
 const card: CreditCard = {
@@ -131,5 +131,47 @@ describe('paid in full every month', () => {
     expect(payoffForMonth([full, other], purchases, '2027-01')).toMatchObject({ totalCents: 25_000, byCard: [{ cents: 25_000 }] });
     expect(payoffForMonth([full], purchases, '2027-03').totalCents).toBe(4_000);
     expect(payoffForMonth([other], purchases, '2027-01')).toEqual({ totalCents: 0, byCard: [] });
+  });
+});
+
+describe('bills linked to a card', () => {
+  // A closed card: nothing new is charged, and a $200.00 monthly bill pays it down.
+  const closed: CreditCard = { id: 'old', name: 'Old Card', aprBps: 2400, startBalanceCents: 100_000, startMonth: '2027-01', payments: [] };
+  const bills = [
+    { id: 'b1', name: 'Old Card payment', amountCents: 20_000, cardId: 'old' },
+    { id: 'b2', name: 'Phone', amountCents: 5_000 },
+  ];
+  const months: Month[] = [
+    { month: '2027-01', payments: { b1: { datePaid: '2027-01-05' }, b2: { datePaid: '2027-01-06' } } },
+    { month: '2027-02', payments: { b1: { datePaid: '2027-02-06', amountPaidCents: 25_000 } } },
+    { month: '2027-03', payments: {} },
+  ];
+  const linked = linkedBills(closed, { bills, months }, today);
+
+  it('turns paid months of the linked bill into card payments', () => {
+    expect(linked.payments).toEqual([
+      { id: 'bill:b1:2027-01', date: '2027-01-05', amountCents: 20_000, billName: 'Old Card payment' },
+      { id: 'bill:b1:2027-02', date: '2027-02-06', amountCents: 25_000, billName: 'Old Card payment' },
+    ]);
+    expect(linked.billAmountCents).toBe(20_000);
+  });
+  it('updates the balance and interest from those payments', () => {
+    const rows = cardMonths(closed, [], today, linked.payments);
+    expect(rows[0]).toMatchObject({ paymentsCents: 20_000, interestCents: 1_600, closingCents: 81_600 });
+    expect(rows[1]).toMatchObject({ paymentsCents: 25_000, interestCents: 1_132, closingCents: 57_732 });
+    expect(rows[2]).toMatchObject({ paymentsCents: 0, closingCents: 57_732, current: true });
+  });
+  it('unmarking a bill takes its payment away', () => {
+    const unmarked = linkedBills(closed, { bills, months: [{ month: '2027-01', payments: {} }] }, today);
+    expect(unmarked.payments).toEqual([]);
+  });
+  it('estimates the payoff from the bill amount', () => {
+    const s = cardSummary(closed, [], today, linked);
+    expect(s.balanceNowCents).toBe(57_732);
+    expect(s.payoffUsesBill).toBe(true);
+    expect(s.payoff).toEqual({ kind: 'months', months: 3, lastMonth: '2027-05', interestCents: 755 + 370 });
+  });
+  it('ignores bills for other cards and unlinked cards', () => {
+    expect(linkedBills({ ...closed, id: 'other' }, { bills, months }, today).payments).toEqual([]);
   });
 });

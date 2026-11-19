@@ -14,7 +14,7 @@ function data(): Data {
       setupDone: true,
     },
     cards: [],
-    bills: [{ id: 'rent', name: 'Rent', amountCents: 120_000, lastMonth: '2027-06' }],
+    bills: [{ id: 'rent', name: 'Rent', amountCents: 120_000, lastMonth: '2027-06', cardId: 'v' }],
     categories: [
       { id: 'food', name: 'Food', budgetCents: 40_000, color: '#000' },
       { id: 'old', name: 'Old', budgetCents: 0, color: '#000', deleted: true },

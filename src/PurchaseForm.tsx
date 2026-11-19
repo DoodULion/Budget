@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { formatCents, monthLabel, monthOf, purchasesIn, type Purchase } from './calc';
-import { cardSummary } from './cards';
+import { cardSummary, linkedBills } from './cards';
 import Icon from './icons';
 import { centsToAmountInput, newId, parseCents } from './money';
 import type { Store } from './store';
@@ -45,7 +45,7 @@ export default function PurchaseForm({
   let cardLive: number | undefined;
   if (linked && monthOf(date) >= linked.startMonth) {
     const others = initial ? data.purchases.filter((p) => p.id !== initial.id) : data.purchases;
-    cardLive = cardSummary(linked, others, today).balanceNowCents + (monthOf(date) <= monthOf(today) ? (cents ?? 0) : 0);
+    cardLive = cardSummary(linked, others, today, linkedBills(linked, data, today)).balanceNowCents + (monthOf(date) <= monthOf(today) ? (cents ?? 0) : 0);
   }
   const amountBad = cents === undefined || cents === 0;
   const category = data.categories.find((c) => c.id === categoryId);

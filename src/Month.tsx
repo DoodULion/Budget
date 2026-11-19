@@ -191,6 +191,7 @@ export default function Month({ store, month, today }: { store: Store; month: Mo
                         : r.status === 'ended'
                           ? 'Ended'
                           : 'Unpaid · tap when paid'}
+                      {r.status !== 'ended' && store.data.cards.some((c) => c.id === r.bill.cardId) && ` · pays ${store.data.cards.find((c) => c.id === r.bill.cardId)?.name}`}
                     </span>
                   </span>
                   <span className="bill-amt">

@@ -11,12 +11,14 @@
  * A card set to pay in full every month has every finished month's statement paid automatically (on top of any payments entered), so it never carries interest.
  * The month in progress has no interest yet; it shows what would be added if the statement stays unpaid.
  */
-import { addMonths, monthOf, monthRange, roundDiv, type Cents, type DateKey, type MonthKey, type Purchase } from './calc';
+import { billRows, addMonths, monthOf, monthRange, roundDiv, type Cents, type Data, type DateKey, type MonthKey, type Purchase } from './calc';
 
 export interface CardPayment {
   id: string;
   date: DateKey;
   amountCents: Cents;
+  /** Set on a payment that comes from a paid bill (not stored on the card): the bill's name. */
+  billName?: string;
 }
 
 export interface CreditCard {
@@ -60,12 +62,12 @@ export function cardCharges(card: Pick<CreditCard, 'name'>, purchases: Purchase[
 }
 
 /** The card month by month, from its start month through today's month. */
-export function cardMonths(card: CreditCard, purchases: Purchase[], today: DateKey): CardMonth[] {
+export function cardMonths(card: CreditCard, purchases: Purchase[], today: DateKey, extraPayments: CardPayment[] = []): CardMonth[] {
   const now = monthOf(today);
   const charges = new Map<MonthKey, Cents>();
   for (const p of cardCharges(card, purchases)) charges.set(monthOf(p.date), (charges.get(monthOf(p.date)) ?? 0) + p.amountCents);
   const paid = new Map<MonthKey, Cents>();
-  for (const p of card.payments) paid.set(monthOf(p.date), (paid.get(monthOf(p.date)) ?? 0) + p.amountCents);
+  for (const p of [...card.payments, ...extraPayments]) paid.set(monthOf(p.date), (paid.get(monthOf(p.date)) ?? 0) + p.amountCents);
 
   const rows: CardMonth[] = [];
   let opening = card.startBalanceCents;
@@ -134,15 +136,19 @@ export interface CardSummary {
   /** The planned payment, else the average payment. */
   payoffPaymentCents?: Cents;
   payoffUsesAverage: boolean;
+  /** The payoff estimate uses the linked bill's amount. */
+  payoffUsesBill: boolean;
+  /** Payments from linked bills (already counted in the figures above). */
+  billPayments: CardPayment[];
   payoff: Payoff;
   /** Charges this year by category id. */
   byCategory: { categoryId: string; cents: Cents }[];
 }
 
-export function cardSummary(card: CreditCard, purchases: Purchase[], today: DateKey): CardSummary {
+export function cardSummary(card: CreditCard, purchases: Purchase[], today: DateKey, linked: LinkedBills = NO_LINKS): CardSummary {
   const now = monthOf(today);
   const year = now.slice(0, 4);
-  const rows = cardMonths(card, purchases, today);
+  const rows = cardMonths(card, purchases, today, linked.payments);
   const cur = rows[rows.length - 1];
   const balanceNowCents = cur ? cur.closingCents : card.startBalanceCents;
   const statementCents = Math.max(0, cur ? cur.openingCents : card.startBalanceCents);
@@ -152,7 +158,7 @@ export function cardSummary(card: CreditCard, purchases: Purchase[], today: Date
   const finished = rows.filter((r) => !r.current);
   const statements = finished.filter((r) => r.paidInFull !== undefined);
   const avgPaymentCents = finished.length ? roundDiv(sum(finished, (r) => r.paymentsCents), finished.length) : 0;
-  const payoffPaymentCents = card.plannedPaymentCents || avgPaymentCents || undefined;
+  const payoffPaymentCents = card.plannedPaymentCents || linked.billAmountCents || avgPaymentCents || undefined;
 
   const cats = new Map<string, Cents>();
   for (const p of cardCharges(card, purchases)) {
@@ -179,7 +185,9 @@ export function cardSummary(card: CreditCard, purchases: Purchase[], today: Date
     avgPaymentCents,
     utilization: card.limitCents ? balanceNowCents / card.limitCents : undefined,
     payoffPaymentCents,
-    payoffUsesAverage: !card.plannedPaymentCents && !!avgPaymentCents,
+    payoffUsesAverage: !card.plannedPaymentCents && !linked.billAmountCents && !!avgPaymentCents,
+    payoffUsesBill: !card.plannedPaymentCents && !!linked.billAmountCents,
+    billPayments: linked.payments,
     payoff: card.payInFull ? { kind: 'full' } : payoff(balanceNowCents, card.aprBps, payoffPaymentCents, now),
     byCategory: [...cats].map(([categoryId, cents]) => ({ categoryId, cents })).sort((a, b) => b.cents - a.cents),
   };
@@ -215,6 +223,34 @@ export function projection(balanceCents: Cents, aprBps: number, monthlyCents: Ce
     if (out.length > 1 && b >= out[out.length - 2]) break; // not shrinking
   }
   return out;
+}
+
+/** What the bills linked to a card contribute. */
+export interface LinkedBills {
+  payments: CardPayment[];
+  /** The linked bills' monthly amounts added up (0 when none, or all have ended). */
+  billAmountCents: Cents;
+}
+const NO_LINKS: LinkedBills = { payments: [], billAmountCents: 0 };
+
+/**
+ * Bills linked to this card (`Bill.cardId`): every month such a bill is marked paid counts as a payment on the card,
+ * for the amount paid (else the bill's amount), dated the day it was paid (else the 1st). Unmarking it removes the payment.
+ */
+export function linkedBills(card: CreditCard, data: Pick<Data, 'bills' | 'months'>, today: DateKey): LinkedBills {
+  const bills = data.bills.filter((b) => b.cardId === card.id);
+  if (bills.length === 0) return NO_LINKS;
+  const now = monthOf(today);
+  const payments: CardPayment[] = [];
+  for (const m of data.months) {
+    if (m.month > now) continue;
+    for (const row of billRows({ ...data, bills } as Data, m.month)) {
+      if (row.status !== 'paid') continue;
+      payments.push({ id: `bill:${row.bill.id}:${m.month}`, date: row.payment?.datePaid ?? `${m.month}-01`, amountCents: row.countedCents, billName: row.bill.name });
+    }
+  }
+  const billAmountCents = bills.filter((b) => !b.deleted && (b.lastMonth === undefined || b.lastMonth >= now)).reduce((sum, b) => sum + b.amountCents, 0);
+  return { payments, billAmountCents };
 }
 
 /** Total owed across cards at the end of each month, from the earliest start through today's month. */

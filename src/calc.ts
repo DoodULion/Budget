@@ -36,6 +36,8 @@ export interface Bill {
   /** The bill ends after this month (e.g. a loan's final payment). */
   lastMonth?: MonthKey;
   note?: string;
+  /** The credit card this bill pays: marking it paid records a payment on that card (see cards.ts). */
+  cardId?: string;
   /** Removed from the list: hidden from months where it has no payment recorded. */
   deleted?: boolean;
 }
