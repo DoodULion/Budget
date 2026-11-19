@@ -52,6 +52,8 @@ All data stays on the device in IndexedDB. No accounts, no backend and no networ
 
 **Category** (spending categories, my own list): `id`, `name`, `budgetCents` (monthly budget), `color`, `hidden` (optional: not offered on Add). The first-run setup suggests names only (Food, Shopping, Entertainment, Misc) with empty budgets. A deleted category stops being offered but stays on past purchases and in their totals.
 
+**CreditCard** (my own list, kept in `cards`): `id`, `name` (also its **Paid with** name, which is how purchases link to it), `aprBps` (APR in hundredths of a percent: 24.99% is 2499), `startBalanceCents` and `startMonth` (what I owed at the start of that month), `limitCents` (optional), `plannedPaymentCents` (optional), and `payments`: `id`, `date`, `amountCents`. Adding a card adds its name to Paid with; renaming it renames the Paid with entry and every purchase tagged with it. Removing a card keeps the Paid with name and past purchases.
+
 **Month** (one per tracked month, created when first needed): `month` (`YYYY-MM`), `incomeCents` (optional: the income actually received; blank means the baseline), and per bill a `BillPayment`: `billId`, `datePaid` (optional), `amountPaidCents` (optional).
 
 **Purchase**: `id`, `date`, `categoryId`, `amountCents` (all required); `description`, `paidWith`, `note` (optional). Its month is the month of its date.
@@ -82,11 +84,15 @@ Put these in a pure TypeScript module (`src/calc.ts`) with no UI code, and test 
 - **Checking balance**, month by month = starting balance + each month's Saved, carried forward. **Checking balance now** = the latest counted month's, or the starting balance when none.
 - **Per category**: this month's spent and left, total for the year, and **average per month** = total ÷ number of started months (at least 1).
 
+## Credit cards (`src/cards.ts`, pure and tested)
+
+Statements are calendar months. For each month from a card's start month through today's: **opening** = last month's closing (the starting balance in the first month); **charges** = purchases paid with the card dated in the month; **payments** = the card's payments dated in the month; **interest**: if the payments cover the opening balance (last statement paid in full) there is none, otherwise (opening − payments) × APR ÷ 12, rounded to the cent, is added when the month ends; **closing** = opening + charges − payments + interest. The month in progress shows what interest would be added if its statement stays unpaid ("Left to avoid interest"). **Payoff estimate**: paying the planned monthly payment (else the average payment so far) every month starting this month, with no new charges; "never" when the payment doesn't beat the monthly interest. Card figures do not change the Summary's Saved or budget math, which still match the spreadsheet.
+
 ## Screens
 
 **First-run setup** (shown until finished; everything editable later under Setup): income baseline, savings goal, starting checking balance, first month, my bills (name, amount, optional last month), my categories with monthly budgets, and my payment methods. Shows Left for spending live and warns if the budgets add up to more. Nothing is pre-filled except suggested category names.
 
-A bottom tab bar: Summary, Add, Purchases, Setup.
+A bottom tab bar: Summary, Cards, Add, Purchases, Setup.
 
 At the top of Summary and Purchases, ‹ period › steps one month (or year) at a time; tapping the period opens a picker with **Month / Year** and a grid to jump to any month (first tracked month to 12 months ahead) or any year, plus This month / This year. Purchases always shows a month.
 
@@ -94,9 +100,10 @@ On Summary (Month and Year views), holding a card and dragging it rearranges the
 
 1. **Summary, Month view** (opens on This month): budget left and spent with a meter, income (tap to enter the actual amount), saved and vs goal, each category's spent / budget / left as meters, and the bills checklist (Paid / Unpaid / Ended; tapping an unpaid bill marks it paid today, ⋮ to set date or a different amount, or to unmark).
 2. **Summary, Year view**: saved to date, months goal met, checking balance now; a month-by-month table (income, bills paid, spent, budget left, saved, vs goal, balance) and SVG charts (saved per month against the goal, balance over the year, spending by category).
-3. **Add**: a purchase in a few taps: amount, category tiles, date (today by default), optional description, paid with and note. Shows the category's left this month as you type. Offers the categories chosen under Setup, plus **New category** (name and budget) which joins the list and is selected.
-4. **Purchases**: the month's purchases grouped by day with day totals, search and filter (category, paid with, amount range), ⋮ for Edit / Delete with Undo for about 7 seconds, as in Trip Tracker.
-5. **Setup**: the settings, bills, categories and payment methods, Left for spending and Freed up figures, plus App settings (theme, backup, CSV export, delete all data). Under the categories, **Show on the Add tab** picks which categories Add offers (at least one); a hidden category keeps its budget and still shows on Summary.
+3. **Cards**: credit cards, with the balance following purchases automatically (see **Credit cards** below). Opens on All cards (a combined view: owed on all cards, each card with its payoff month, total balance over time, interest, and which to pay down first by APR) with a chip row to open one card. One card shows: balance with limit meter, APR, available and limit used; this month's statement with Add a payment; estimated payoff date with what-ifs for +$50 and +$100 a month; balance over time with the projected paydown dashed; spending (this month, this year, all time, bars per month); interest and payments (interest all time and this year, monthly cost at this balance, average payment, statements paid in full, interest per month); spending by category this year; payments list; and a month-by-month table. Cards on each view can be rearranged by hold-and-drag (per-device). Add / edit / remove a card from this tab.
+4. **Add**: a purchase in a few taps: amount, category tiles, date (today by default), optional description, paid with and note. Shows the category's left this month as you type. Paid with a credit card, it also shows that card's balance counting the purchase. Offers the categories chosen under Setup, plus **New category** (name and budget) which joins the list and is selected.
+5. **Purchases**: the month's purchases grouped by day with day totals, search and filter (category, paid with, amount range), ⋮ for Edit / Delete with Undo for about 7 seconds, as in Trip Tracker.
+6. **Setup**: the settings, bills, categories and payment methods, Left for spending and Freed up figures, plus App settings (theme, backup, CSV export, delete all data). Every entry is editable: tap a bill, category or Paid with name (rename updates past purchases and a card of the same name; category color; bill note). Under the categories, **Show on the Add tab** picks which categories Add offers (at least one); a hidden category keeps its budget and still shows on Summary.
 
 ## Backup
 
@@ -118,6 +125,7 @@ Expected:
 - Feb: income $1,800.00; statuses Paid / Unpaid / Ended ("1 unpaid"); bills paid $1,200.00; spent $470.00; Food $450.00 (left −$50.00, over); budget left $80.00; saved $130.00; vs goal −$370.00; balance $3,639.05.
 - Mar: a future month: saved, vs goal and balance are blank.
 - Left for spending: Jan $1,220.00, Feb $1,250.00. Spending budget $550.00 is under both (no warning). Freed up after bills end $30.00.
+- Cards (made-up Test Visa: APR 24%, start balance $1,000.00 in 2027-01, payments $300.00 on 01-20 and $964.00 on 02-10; purchases $250.00 in Jan, $100.00 in Feb, $40.00 in Mar; today 2027-03-15): Jan interest $14.00 and closing $964.00; Feb paid in full, no interest, closing $100.00; Mar (in progress) closing $140.00 with $2.00 projected interest; payoff at $50.00 a month is 3 payments ending 2027-05 with $2.64 of interest.
 - Year: this month Feb 2027 (spent $470.00, budget left $80.00); saved to date $1,639.05; months goal met "1 of 2"; checking balance now $3,639.05.
 - Category averages over 2 started months: Food $315.38 (total $630.75), Fun $32.50, Other $5.00.
 - With today 2026-12-10 (before the first month): this month is Jan 2027, no months counted, months goal met "0 of 0", balance now $2,000.00.

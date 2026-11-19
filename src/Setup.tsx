@@ -9,6 +9,8 @@ import {
   spendingBudgetCents,
   thisMonth,
   type Bill,
+  CATEGORY_COLORS,
+  nextCategoryColor,
   type Category,
   type Data,
   type Settings,
@@ -149,10 +151,10 @@ function BillsCard({ store, step }: { store: Store; step?: number }) {
         <ul className="list-edit">
           {bills.map((b) => (
             <li key={b.id}>
-              <span className="li-main">
+              <button type="button" className="li-main li-tap" onClick={() => setEditing(b)} aria-label={`Edit ${b.name}`}>
                 <b>{b.name}</b>
-                <span>{b.lastMonth ? `Last payment ${monthLabel(b.lastMonth)}` : 'Every month'}</span>
-              </span>
+                <span>{[b.lastMonth ? `Last payment ${monthLabel(b.lastMonth)}` : 'Every month', b.note].filter(Boolean).join(' · ')}</span>
+              </button>
               <span className="li-amt">{formatCents(b.amountCents)}</span>
               <button type="button" className="more" aria-label={`Edit ${b.name}`} aria-haspopup="dialog" onClick={() => setEditing(b)}>
                 <Icon name="dots" />
@@ -174,6 +176,7 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
   const [name, setName] = useState(bill?.name ?? '');
   const [amount, setAmount] = useState(bill ? centsToAmountInput(bill.amountCents) : '');
   const [ends, setEnds] = useState(bill?.lastMonth ?? '');
+  const [note, setNote] = useState(bill?.note ?? '');
   const [confirm, setConfirm] = useState(false);
   const [tried, setTried] = useState(false);
   const { offer } = useUndo();
@@ -185,7 +188,7 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
     if (errors.length || cents === undefined) return;
     const next: Bill = { id: bill?.id ?? newId(), name: name.trim(), amountCents: cents };
     if (ends) next.lastMonth = ends;
-    if (bill?.note) next.note = bill.note;
+    if (note.trim()) next.note = note.trim();
     await store.putBill(next);
     if (bill) offer(`Saved ${next.name}`, () => store.putBill(bill));
     else offer(`Added ${next.name}`, () => store.removeBill(next.id));
@@ -234,16 +237,18 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
           <span>Name</span>
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Rent" autoComplete="off" />
         </label>
-        <div className="grid2">
-          <label className="field">
-            <span>Each month</span>
-            <MoneyInput value={amount} onValue={setAmount} placeholder="0.00" />
-          </label>
-          <label className="field">
-            <span>Last payment (optional)</span>
-            <input type="month" value={ends} onChange={(e) => setEnds(e.target.value)} />
-          </label>
-        </div>
+        <label className="field">
+          <span>Each month</span>
+          <MoneyInput value={amount} onValue={setAmount} placeholder="0.00" />
+        </label>
+        <label className="field">
+          <span>Last payment (optional)</span>
+          <input type="month" value={ends} onChange={(e) => setEnds(e.target.value)} />
+        </label>
+        <label className="field">
+          <span>Note (optional)</span>
+          <input type="text" value={note} onChange={(e) => setNote(e.target.value)} autoComplete="off" />
+        </label>
         <p className="muted small">Set a last payment for a bill that ends, like a car loan. After that month it shows as Ended and its money counts toward savings.</p>
         {tried && errors.length > 0 && <p className="error" role="alert">{errors.join(' · ')}</p>}
         <div className="sheet-actions">
@@ -307,10 +312,10 @@ function CategoriesCard({ store, today, step }: { store: Store; today: string; s
           {cats.map((c) => (
             <li key={c.id}>
               <CatTile category={c} />
-              <span className="li-main">
+              <button type="button" className="li-main li-tap" onClick={() => setEditing(c)} aria-label={`Edit ${c.name}`}>
                 <b>{c.name}</b>
                 {c.hidden && <span>Not on Add</span>}
-              </span>
+              </button>
               <BudgetInput key={c.id + c.budgetCents} category={c} onSave={(cents) => store.putCategory({ ...c, budgetCents: cents })} />
               <button type="button" className="more" aria-label={`Rename or remove ${c.name}`} aria-haspopup="dialog" onClick={() => setEditing(c)}>
                 <Icon name="dots" />
@@ -370,6 +375,7 @@ export function CategorySheet({
 }) {
   const [name, setName] = useState(category?.name ?? '');
   const [budget, setBudget] = useState(category?.budgetCents ? centsToAmountInput(category.budgetCents) : '');
+  const [color, setColor] = useState(category?.color ?? nextCategoryColor(store.data.categories));
   const [tried, setTried] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const { offer } = useUndo();
@@ -381,10 +387,10 @@ export function CategorySheet({
     setTried(true);
     if (errors.length || cents === undefined) return;
     if (category) {
-      await store.putCategory({ ...category, name: name.trim(), budgetCents: cents });
+      await store.putCategory({ ...category, name: name.trim(), budgetCents: cents, color });
       offer(`Saved ${name.trim()}`, () => store.putCategory(category));
     } else {
-      const made = await store.addCategory(name.trim(), cents);
+      const made = await store.addCategory(name.trim(), cents, color);
       offer(`Added ${made.name}`, () => store.removeCategory(made.id));
       onAdded?.(made);
     }
@@ -439,6 +445,16 @@ export function CategorySheet({
             <MoneyInput value={budget} onValue={setBudget} placeholder="0" />
           </label>
         </div>
+        <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+          <span>Color</span>
+          <div className="chips" role="radiogroup" aria-label="Category color">
+            {CATEGORY_COLORS.map((k) => (
+              <button key={k} type="button" role="radio" aria-checked={color === k} aria-label={`Color ${k.slice(1)}`} className={color === k ? 'on' : ''} onClick={() => setColor(k)}>
+                <CatTile category={{ name: name || '?', color: k }} small />
+              </button>
+            ))}
+          </div>
+        </fieldset>
         {tried && errors.length > 0 && <p className="error" role="alert">{errors.join(' · ')}</p>}
         <div className="sheet-actions">
           <button type="submit" className="primary">
@@ -463,6 +479,7 @@ export function CategorySheet({
 function PaidWithCard({ store, step }: { store: Store; step?: number }) {
   const list = store.data.settings.paidWith;
   const [text, setText] = useState('');
+  const [editing, setEditing] = useState<string | null>(null);
   const { offer } = useUndo();
   const name = text.trim();
   const dupe = list.some((m) => m.toLowerCase() === name.toLowerCase());
@@ -484,19 +501,12 @@ function PaidWithCard({ store, step }: { store: Store; step?: number }) {
         <ul className="list-edit">
           {list.map((m) => (
             <li key={m}>
-              <span className="li-main">
+              <button type="button" className="li-main li-tap" onClick={() => setEditing(m)} aria-label={`Edit ${m}`}>
                 <b>{m}</b>
-              </span>
-              <button
-                type="button"
-                className="more"
-                aria-label={`Remove ${m}`}
-                onClick={async () => {
-                  await store.saveSettings({ paidWith: list.filter((x) => x !== m) });
-                  offer(`Removed ${m}`, () => store.saveSettings({ paidWith: list }));
-                }}
-              >
-                <Icon name="close" />
+                {store.data.cards.some((c) => c.name === m) && <span>Credit card</span>}
+              </button>
+              <button type="button" className="more" aria-label={`Edit ${m}`} aria-haspopup="dialog" onClick={() => setEditing(m)}>
+                <Icon name="dots" />
               </button>
             </li>
           ))}
@@ -516,7 +526,91 @@ function PaidWithCard({ store, step }: { store: Store; step?: number }) {
         </button>
       </form>
       {dupe && name && <p className="muted small">Already on the list.</p>}
+      {editing !== null && <PaidWithSheet store={store} current={editing} onClose={() => setEditing(null)} offer={offer} />}
     </section>
+  );
+}
+
+function PaidWithSheet({ store, current, onClose, offer }: { store: Store; current: string; onClose: () => void; offer: ReturnType<typeof useUndo>['offer'] }) {
+  const [name, setName] = useState(current);
+  const [confirm, setConfirm] = useState(false);
+  const list = store.data.settings.paidWith;
+  const isCard = store.data.cards.some((c) => c.name === current);
+  const used = store.data.purchases.filter((p) => p.paidWith === current).length;
+  const next = name.trim();
+  const taken = list.some((m) => m !== current && m.toLowerCase() === next.toLowerCase());
+  const error = !next ? 'Enter a name' : taken ? 'That name is already on the list' : '';
+
+  async function save() {
+    if (error) return;
+    if (next !== current) {
+      await store.renamePaidWith(current, next);
+      offer(`Renamed to ${next}`, () => store.renamePaidWith(next, current));
+    }
+    onClose();
+  }
+
+  async function remove() {
+    await store.saveSettings({ paidWith: list.filter((x) => x !== current) });
+    offer(`Removed ${current}`, () => store.saveSettings({ paidWith: list }));
+    onClose();
+  }
+
+  if (confirm) {
+    return (
+      <SheetBackdrop onClose={onClose}>
+        <div className="sheet menu" role="alertdialog" aria-modal="true" aria-label="Confirm remove">
+          <h2>Remove {current}?</h2>
+          <p className="muted small">It won't be offered on new purchases. Past purchases keep the tag.</p>
+          <button type="button" className="danger armed" onClick={() => void remove()}>
+            Remove
+          </button>
+          <button type="button" className="secondary" onClick={() => setConfirm(false)}>
+            Cancel
+          </button>
+        </div>
+      </SheetBackdrop>
+    );
+  }
+
+  return (
+    <SheetBackdrop onClose={onClose}>
+      <form
+        className="sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pw-h"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        <h2 id="pw-h">Edit payment method</h2>
+        <label className="field">
+          <span>Name</span>
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
+        </label>
+        <p className="muted small">
+          Renaming updates {used} purchase{used === 1 ? '' : 's'}{isCard ? ' and the credit card of the same name' : ''}.
+        </p>
+        {error && <p className="error" role="alert">{error}</p>}
+        <div className="sheet-actions">
+          <button type="submit" className="primary" disabled={!!error}>
+            Save changes
+          </button>
+          {!isCard && (
+            <button type="button" className="danger" onClick={() => setConfirm(true)}>
+              Remove
+            </button>
+          )}
+          {isCard && <p className="muted small">Remove a credit card from the Cards tab.</p>}
+          <button type="button" className="secondary" onClick={onClose}>
+            Discard changes
+          </button>
+        </div>
+      </form>
+    </SheetBackdrop>
   );
 }
 

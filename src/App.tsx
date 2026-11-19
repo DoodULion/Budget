@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import Add from './Add';
+import Cards from './Cards';
 import { addMonths, monthLabel, thisMonth, type MonthKey } from './calc';
 import Icon, { type IconName } from './icons';
 import Month from './Month';
@@ -11,10 +12,11 @@ import { UndoProvider } from './undo';
 import { useToday } from './useToday';
 import Year from './Year';
 
-type Tab = 'summary' | 'add' | 'purchases' | 'setup';
+type Tab = 'summary' | 'cards' | 'add' | 'purchases' | 'setup';
 
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'summary', label: 'Summary', icon: 'year' },
+  { id: 'cards', label: 'Cards', icon: 'card' },
   { id: 'add', label: 'Add', icon: 'add' },
   { id: 'purchases', label: 'Purchases', icon: 'entries' },
   { id: 'setup', label: 'Setup', icon: 'setup' },
@@ -121,6 +123,8 @@ function Main({ store, today }: { store: Store; today: string }) {
               ) : (
                 <Month store={store} month={month} today={today} />
               )
+            ) : tab === 'cards' ? (
+              <Cards store={store} today={today} />
             ) : tab === 'add' ? (
               <Add store={store} today={today} />
             ) : tab === 'purchases' ? (

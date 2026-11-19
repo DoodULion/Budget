@@ -6,6 +6,12 @@ const PATHS = {
       <path d="M4 10h16M9 3v4M15 3v4M8 14h3M8 17h6" />
     </>
   ),
+  card: (
+    <>
+      <rect x="3" y="5.5" width="18" height="13" rx="2.5" />
+      <path d="M3 10h18M7 15h4" />
+    </>
+  ),
   year: <path d="M4 19h16M6 16V11M10 16V8M14 16v-5M18 16V5" />,
   setup: (
     <>

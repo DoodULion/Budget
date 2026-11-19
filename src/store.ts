@@ -17,6 +17,7 @@ import {
   type Purchase,
   type Settings,
 } from './calc';
+import type { CreditCard } from './cards';
 import * as db from './db';
 import { newId, todayLocal } from './money';
 
@@ -26,8 +27,17 @@ export interface Store {
   putBill: (bill: Bill) => Promise<void>;
   /** Removes the bill; it stays on months where it was paid. */
   removeBill: (id: string) => Promise<void>;
+  /**
+   * Add or change a credit card. Its name is also a Paid with name: it is added to the list, and on a rename
+   * (`oldName`) the list entry and every purchase tagged with the old name follow, so balances stay linked.
+   */
+  saveCard: (card: CreditCard, oldName?: string) => Promise<void>;
+  /** Rename a Paid with name everywhere: the list, purchases tagged with it, and a card that uses it. */
+  renamePaidWith: (oldName: string, newName: string) => Promise<void>;
+  /** Removes the card's balance tracking; the Paid with name and tagged purchases stay. */
+  removeCard: (id: string) => Promise<void>;
   putCategory: (category: Category) => Promise<void>;
-  addCategory: (name: string, budgetCents?: number) => Promise<Category>;
+  addCategory: (name: string, budgetCents?: number, color?: string) => Promise<Category>;
   /** Stops offering the category; past purchases keep it. */
   removeCategory: (id: string) => Promise<void>;
   setIncome: (month: MonthKey, incomeCents: number | undefined) => Promise<void>;
@@ -87,6 +97,65 @@ export function useStore(): AppState {
         if (gone) await db.putBill(gone);
         else await db.deleteBill(id);
       },
+      async saveCard(card: CreditCard, oldName?: string) {
+        let settings: Settings | undefined;
+        const retagged: Purchase[] = [];
+        update((d) => {
+          const renamed = oldName !== undefined && oldName !== card.name;
+          let paidWith = d.settings.paidWith;
+          if (renamed) paidWith = paidWith.includes(card.name) ? paidWith.filter((m) => m !== oldName) : paidWith.map((m) => (m === oldName ? card.name : m));
+          if (!paidWith.includes(card.name)) paidWith = [...paidWith, card.name];
+          settings = paidWith === d.settings.paidWith ? undefined : { ...d.settings, paidWith };
+          retagged.length = 0;
+          const purchases = renamed
+            ? d.purchases.map((p) => {
+                if (p.paidWith !== oldName) return p;
+                const q = { ...p, paidWith: card.name };
+                retagged.push(q);
+                return q;
+              })
+            : d.purchases;
+          return {
+            ...d,
+            settings: settings ?? d.settings,
+            purchases,
+            cards: d.cards.some((c) => c.id === card.id) ? d.cards.map((c) => (c.id === card.id ? card : c)) : [...d.cards, card],
+          };
+        });
+        await db.putCard(card);
+        if (settings) await db.saveSettings(settings);
+        await Promise.all(retagged.map(db.putPurchase));
+      },
+      async renamePaidWith(oldName: string, newName: string) {
+        if (oldName === newName) return;
+        let settings: Settings | undefined;
+        let card: CreditCard | undefined;
+        const retagged: Purchase[] = [];
+        update((d) => {
+          retagged.length = 0;
+          card = undefined;
+          settings = { ...d.settings, paidWith: d.settings.paidWith.map((m) => (m === oldName ? newName : m)) };
+          const purchases = d.purchases.map((p) => {
+            if (p.paidWith !== oldName) return p;
+            const q = { ...p, paidWith: newName };
+            retagged.push(q);
+            return q;
+          });
+          const cards = d.cards.map((c) => {
+            if (c.name !== oldName) return c;
+            card = { ...c, name: newName };
+            return card;
+          });
+          return { ...d, settings, purchases, cards };
+        });
+        if (settings) await db.saveSettings(settings);
+        if (card) await db.putCard(card);
+        await Promise.all(retagged.map(db.putPurchase));
+      },
+      async removeCard(id: string) {
+        update((d) => ({ ...d, cards: d.cards.filter((c) => c.id !== id) }));
+        await db.deleteCard(id);
+      },
       async putCategory(category: Category) {
         update((d) => ({
           ...d,
@@ -96,10 +165,10 @@ export function useStore(): AppState {
         }));
         await db.putCategory(category);
       },
-      async addCategory(name: string, budgetCents = 0) {
+      async addCategory(name: string, budgetCents = 0, color?: string) {
         let made: Category | undefined;
         update((d) => {
-          made = { id: newId(), name, budgetCents, color: nextCategoryColor(d.categories) };
+          made = { id: newId(), name, budgetCents, color: color ?? nextCategoryColor(d.categories) };
           return { ...d, categories: [...d.categories, made] };
         });
         await db.putCategory(made!);
@@ -164,6 +233,7 @@ export function useStore(): AppState {
         const fresh: Data = {
           settings: emptySettings(monthOf(todayLocal())),
           bills: [],
+          cards: [],
           categories: SUGGESTED_CATEGORIES.map((name, i) => ({ id: newId() + i, name, budgetCents: 0, color: `c${i + 1}` })),
           months: [],
           purchases: [],
