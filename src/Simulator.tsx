@@ -182,7 +182,7 @@ export default function Simulator({ store, today }: { store: Store; today: strin
     offer(`${plan.name} deleted`, async () => setSt(before), 'warn');
   }
 
-  const two = (a: number[], b: number[]): Series[] => (has ? [{ name: 'With changes', values: a, cls: 's0' }, { name: 'As planned', values: b, cls: 's1' }] : [{ name: 'As planned', values: b, cls: 's0' }]);
+  const two = (a: number[], b: number[]): Series[] => (has ? [{ name: 'With changes', values: a, cls: 's0' }, { name: 'As planned', values: b, cls: 's2 planned' }] : [{ name: 'As planned', values: b, cls: 's0' }]);
   const freeBase = debtFreeMonth(base);
   const freeScen = debtFreeMonth(scen);
   const describeChange = (c: Change) => changeText(c, debts, bills);

@@ -682,10 +682,12 @@ html[data-nav] .band-in { animation: none; } /* the whole screen is already slid
 .chart-key i.k-neg { background: var(--red); }
 .chart-key i.k-goal { height: 2px; border-radius: 0; background: repeating-linear-gradient(90deg, var(--mute) 0 4px, transparent 4px 7px); }
 .table-wrap { overflow-x: auto; margin: 6px -18px -6px; padding: 0 18px 6px; scrollbar-width: thin; }
-.ytable { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 0.9rem; }
+.ytable { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 640px; font-size: 0.9rem; }
 .ytable th, .ytable td { padding: 9px 8px; text-align: right; white-space: nowrap; border-bottom: 1.5px solid var(--line); }
 .ytable thead th { font-size: 0.75rem; color: var(--mute); font-weight: 800; }
-.ytable th:first-child, .ytable td:first-child { text-align: left; position: sticky; left: 0; background: var(--sign); padding-left: 0; }
+.ytable th:first-child, .ytable td:first-child { text-align: left; position: sticky; left: 0; z-index: 1; background: var(--sign); padding-left: 0; padding-right: 14px;
+  /* the pinned month column covers the card's side padding too, and a thin edge shows where the numbers slide under it */
+  box-shadow: -18px 0 0 var(--sign), inset -1.5px 0 0 var(--line); }
 .ytable tbody th { font-weight: 800; }
 .ytable td { font-weight: 700; }
 .ytable tr.future td, .ytable tr.future th { color: var(--mute); font-weight: 600; }
@@ -828,6 +830,7 @@ html[data-nav] .band-in { animation: none; } /* the whole screen is already slid
 .ychart g.s0 .line { stroke: var(--s0); } .ychart g.s0 .dot { stroke: var(--s0); }
 .ychart g.s1 .line { stroke: var(--s1); } .ychart g.s1 .dot { stroke: var(--s1); }
 .ychart g.s2 .line { stroke: var(--s2); } .ychart g.s2 .dot { stroke: var(--s2); }
+.ychart g.planned .line { stroke-dasharray: 7 5; } /* the Simulator's As planned: amber and dashed, so it never reads as the cobalt With changes */
 .ychart g.s3 .line { stroke: var(--s3); } .ychart g.s3 .dot { stroke: var(--s3); }
 .chart-key i.k { width: 12px; height: 12px; border-radius: 4px; }
 .chart-key i.s0 { background: var(--s0); } .chart-key i.s1 { background: var(--s1); }
