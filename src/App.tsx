@@ -16,7 +16,7 @@ type Tab = 'summary' | 'cards' | 'add' | 'purchases' | 'setup';
 
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'summary', label: 'Summary', icon: 'year' },
-  { id: 'cards', label: 'Cards', icon: 'card' },
+  { id: 'cards', label: 'Credit Cards', icon: 'card' },
   { id: 'add', label: 'Add', icon: 'add' },
   { id: 'purchases', label: 'Purchases', icon: 'entries' },
   { id: 'setup', label: 'Setup', icon: 'setup' },

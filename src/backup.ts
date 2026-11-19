@@ -85,6 +85,7 @@ export function parseBackup(text: string): Data {
         isMonth(c.startMonth) &&
         optInt(c.limitCents) &&
         optInt(c.plannedPaymentCents) &&
+        (c.payInFull === undefined || typeof c.payInFull === 'boolean') &&
         Array.isArray(c.payments) &&
         c.payments.every((p) => isObj(p) && isStr(p.id) && isDate(p.date) && isInt(p.amountCents)),
     ),

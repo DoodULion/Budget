@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Purchase } from './calc';
-import { cardMonths, cardSummary, formatApr, parseApr, payoff, projection, totalSeries, type CreditCard } from './cards';
+import { cardMonths, cardSummary, formatApr, parseApr, payoff, payoffForMonth, projection, totalSeries, type CreditCard } from './cards';
 
 // Made-up figures only.
 const card: CreditCard = {
@@ -112,5 +112,24 @@ describe('totalSeries', () => {
     expect(series.map((x) => x.month)).toEqual(['2027-01', '2027-02', '2027-03']);
     expect(series[0].cents).toBe(96_400);
     expect(series[1].cents).toBe(10_000 + 20_400); // the second card starts at $200 and owes a month of interest by month end
+  });
+});
+
+describe('paid in full every month', () => {
+  const full: CreditCard = { ...card, payInFull: true, payments: [] };
+  const rows = cardMonths(full, purchases, today);
+  it('pays each finished statement automatically, with no interest', () => {
+    expect(rows[0]).toMatchObject({ openingCents: 100_000, chargesCents: 25_000, paymentsCents: 100_000, interestCents: 0, closingCents: 25_000, paidInFull: true });
+    expect(rows[1]).toMatchObject({ openingCents: 25_000, chargesCents: 10_000, paymentsCents: 25_000, interestCents: 0, closingCents: 10_000 });
+  });
+  it('leaves the month in progress alone and has no payoff date', () => {
+    expect(rows[2]).toMatchObject({ openingCents: 10_000, paymentsCents: 0, closingCents: 14_000, current: true });
+    expect(cardSummary(full, purchases, today).payoff).toEqual({ kind: 'full' });
+  });
+  it('lists what pay-in-full cards charged in a month as the Credit Card payoff', () => {
+    const other: CreditCard = { ...card, id: 'o', name: 'Other', payInFull: false, payments: [] };
+    expect(payoffForMonth([full, other], purchases, '2027-01')).toMatchObject({ totalCents: 25_000, byCard: [{ cents: 25_000 }] });
+    expect(payoffForMonth([full], purchases, '2027-03').totalCents).toBe(4_000);
+    expect(payoffForMonth([other], purchases, '2027-01')).toEqual({ totalCents: 0, byCard: [] });
   });
 });

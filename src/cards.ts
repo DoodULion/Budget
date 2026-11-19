@@ -8,6 +8,7 @@
  * - if the payments cover the opening balance (last statement paid in full), no interest;
  *   otherwise interest = (opening − payments) × APR ÷ 12, posted when the month ends;
  * - closing = opening + charges − payments + interest.
+ * A card set to pay in full every month has every finished month's statement paid automatically (on top of any payments entered), so it never carries interest.
  * The month in progress has no interest yet; it shows what would be added if the statement stays unpaid.
  */
 import { addMonths, monthOf, monthRange, roundDiv, type Cents, type DateKey, type MonthKey, type Purchase } from './calc';
@@ -30,6 +31,8 @@ export interface CreditCard {
   limitCents?: Cents;
   /** What I plan to pay each month; drives the payoff estimate. */
   plannedPaymentCents?: Cents;
+  /** Paid off in full every month: each earlier month's statement counts as paid, so there is no interest. */
+  payInFull?: boolean;
   payments: CardPayment[];
 }
 
@@ -68,8 +71,10 @@ export function cardMonths(card: CreditCard, purchases: Purchase[], today: DateK
   let opening = card.startBalanceCents;
   for (const month of monthRange(card.startMonth, now)) {
     const c = charges.get(month) ?? 0;
-    const p = paid.get(month) ?? 0;
     const current = month === now;
+    const entered = paid.get(month) ?? 0;
+    // Pay-in-full cards: the statement coming in is paid during the month (once the month is over).
+    const p = card.payInFull && !current && opening > entered ? opening : entered;
     const unpaid = opening - p;
     const paidInFull = opening > 0 ? unpaid <= 0 : undefined;
     const interestCents = current || paidInFull !== false ? 0 : monthlyInterestCents(unpaid, card.aprBps);
@@ -80,7 +85,7 @@ export function cardMonths(card: CreditCard, purchases: Purchase[], today: DateK
   return rows;
 }
 
-export type Payoff = { kind: 'clear' } | { kind: 'never' } | { kind: 'noPlan' } | { kind: 'months'; months: number; lastMonth: MonthKey; interestCents: Cents };
+export type Payoff = { kind: 'full' } | { kind: 'clear' } | { kind: 'never' } | { kind: 'noPlan' } | { kind: 'months'; months: number; lastMonth: MonthKey; interestCents: Cents };
 
 /**
  * How long paying `monthlyCents` a month takes to clear `balanceCents` with no new charges,
@@ -175,7 +180,7 @@ export function cardSummary(card: CreditCard, purchases: Purchase[], today: Date
     utilization: card.limitCents ? balanceNowCents / card.limitCents : undefined,
     payoffPaymentCents,
     payoffUsesAverage: !card.plannedPaymentCents && !!avgPaymentCents,
-    payoff: payoff(balanceNowCents, card.aprBps, payoffPaymentCents, now),
+    payoff: card.payInFull ? { kind: 'full' } : payoff(balanceNowCents, card.aprBps, payoffPaymentCents, now),
     byCategory: [...cats].map(([categoryId, cents]) => ({ categoryId, cents })).sort((a, b) => b.cents - a.cents),
   };
 }
@@ -221,3 +226,14 @@ export function totalSeries(summaries: CardSummary[], today: DateKey): { month: 
     cents: summaries.reduce((sum, s) => sum + (s.rows.find((r) => r.month === month)?.closingCents ?? 0), 0),
   }));
 }
+
+/** What pay-in-full cards charged in a month: that month's balance, paid off in full ("Credit Card payoff"). */
+export function payoffForMonth(cards: CreditCard[], purchases: Purchase[], month: MonthKey): { totalCents: Cents; byCard: { card: CreditCard; cents: Cents }[] } {
+  const byCard = cards
+    .filter((c) => c.payInFull)
+    .map((card) => ({ card, cents: cardCharges(card, purchases).filter((p) => monthOf(p.date) === month).reduce((s, p) => s + p.amountCents, 0) }));
+  return { totalCents: byCard.reduce((s, c) => s + c.cents, 0), byCard };
+}
+
+/** The name of this line on Month. */
+export const PAYOFF_NAME = 'Credit Card payoff';

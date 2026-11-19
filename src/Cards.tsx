@@ -32,7 +32,7 @@ export default function Cards({ store, today }: { store: Store; today: string })
 
   return (
     <div className="screen">
-      <h1>Credit cards</h1>
+      <h1>Credit Cards</h1>
       {summaries.length === 0 ? (
         <section className="card">
           <h2>Track your credit cards</h2>
@@ -117,7 +117,7 @@ function Overview({ summaries, today, onOpen }: { summaries: CardSummary[]; toda
   const interestAll = sum((s) => s.interestAllCents);
   const series = totalSeries(summaries, today);
   const monthlyInterest = summaries.reduce((t, s) => t + monthlyInterestCents(Math.max(0, s.balanceNowCents), s.card.aprBps), 0);
-  const byApr = summaries.filter((s) => s.balanceNowCents > 0).sort((a, b) => b.card.aprBps - a.card.aprBps);
+  const byApr = summaries.filter((s) => s.balanceNowCents > 0 && !s.card.payInFull).sort((a, b) => b.card.aprBps - a.card.aprBps);
 
   const cards: Record<string, JSX.Element> = {
     total: (
@@ -211,6 +211,7 @@ function Overview({ summaries, today, onOpen }: { summaries: CardSummary[]; toda
 
 function payoffShort(s: CardSummary): string {
   const p = s.payoff;
+  if (p.kind === 'full') return 'Paid in full monthly';
   if (p.kind === 'clear') return 'Paid off';
   if (p.kind === 'noPlan') return 'Set a monthly payment';
   if (p.kind === 'never') return 'Payment too small';
@@ -283,7 +284,7 @@ function CardDetail({
       <section {...drag('statement', 'card')} aria-labelledby="st-h">
         <div className="card-head">
           <h2 id="st-h">This month's statement</h2>
-          {s.statementCents > 0 && <span className={`pill${s.leftToAvoidInterestCents > 0 ? ' idle' : ''}`}>{s.leftToAvoidInterestCents > 0 ? 'Unpaid' : 'Paid'}</span>}
+          {s.statementCents > 0 && <span className={`pill${s.leftToAvoidInterestCents > 0 ? ' idle' : ''}`}>{s.leftToAvoidInterestCents > 0 ? (card.payInFull ? 'Due' : 'Unpaid') : 'Paid'}</span>}
         </div>
         {s.statementCents === 0 ? (
           <p className="muted">Nothing was owed at the start of {monthLabel(nowMonth)}, so no interest this month.</p>
@@ -297,7 +298,9 @@ function CardDetail({
               <dt className="sum-line">Left to avoid interest</dt>
               <dd className="sum-line">{formatCents(s.leftToAvoidInterestCents)}</dd>
             </dl>
-            {s.leftToAvoidInterestCents > 0 ? (
+            {s.leftToAvoidInterestCents > 0 && card.payInFull ? (
+              <p className="muted small">This card is paid in full every month. Pay the statement by the end of {monthLabel(nowMonth)} and no interest is charged.</p>
+            ) : s.leftToAvoidInterestCents > 0 ? (
               <p className="muted small">
                 Leave it unpaid and about {formatCents(s.projectedInterestCents)} of interest ({formatApr(card.aprBps)} ÷ 12) is added at the end of {monthLabel(nowMonth)}.
               </p>
@@ -314,6 +317,11 @@ function CardDetail({
     payoff: (
       <section {...drag('payoff', 'card')} aria-labelledby="po-h">
         <h2 id="po-h">Estimated payoff</h2>
+        {s.payoff.kind === 'full' && (
+          <p className="muted">
+            This card is paid in full every month, so there is no payoff date and no interest. Pay the {formatCents(s.statementCents)} statement and the balance starts over with new purchases.
+          </p>
+        )}
         {s.payoff.kind === 'clear' && <p className="muted">No balance to pay off.</p>}
         {s.payoff.kind === 'noPlan' && (
           <>
@@ -592,6 +600,7 @@ function CardSheet({
   const [start, setStart] = useState(card?.startMonth ?? today.slice(0, 7));
   const [limit, setLimit] = useState(card?.limitCents ? centsToAmountInput(card.limitCents) : '');
   const [plan, setPlan] = useState(card?.plannedPaymentCents ? centsToAmountInput(card.plannedPaymentCents) : '');
+  const [full, setFull] = useState(card?.payInFull ?? false);
   const [tried, setTried] = useState(false);
   const [confirm, setConfirm] = useState(false);
 
@@ -628,6 +637,7 @@ function CardSheet({
     };
     if (lim) next.limitCents = lim;
     if (pl) next.plannedPaymentCents = pl;
+    if (full) next.payInFull = true;
     await store.saveCard(next, card?.name);
     if (card) offer(`Saved ${next.name}`, () => store.saveCard(card, next.name));
     else offer(`Added ${next.name}`, () => store.removeCard(next.id));
@@ -710,6 +720,13 @@ function CardSheet({
           <span>Tracking since</span>
           <input type="month" value={start} onChange={(e) => setStart(e.target.value)} />
         </label>
+        <button type="button" role="switch" aria-checked={full} className={`switch-row${full ? ' on' : ''}`} onClick={() => setFull(!full)}>
+          <span>
+            <b>Paid in full every month</b>
+            <small>No interest. Each month's balance shows as "Credit Card payoff" on Summary.</small>
+          </span>
+          <i aria-hidden="true" />
+        </button>
         <p className="muted small">
           Purchases tagged with this card under Paid with, dated {monthLabel(start)} or later, add to the balance. Enter what you owed at the start of that month. The planned payment drives the payoff
           date; without it the average of your payments is used.

@@ -129,7 +129,7 @@ h2 { font-size: 1.25rem; margin: 0 0 4px; color: var(--ink); font-weight: 800; l
 }
 .tabbar button {
   position: relative; flex: 1; min-width: 0; min-height: 58px; border: 0; border-radius: 22px; background: none; color: var(--mute);
-  font: inherit; font-size: 0.75rem; font-weight: 700;
+  font: inherit; font-size: 0.75rem; font-weight: 700; line-height: 1.1; text-align: center;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   transition: background-color 200ms ease-out, color 200ms ease-out;
 }
@@ -753,3 +753,16 @@ html[data-nav] .band-in { animation: none; } /* the whole screen is already slid
 .whatif b { font-weight: 800; }
 .warn-line { margin: 0; display: flex; gap: 8px; align-items: flex-start; color: var(--red); font-weight: 700; }
 .card-open { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; min-height: 44px; cursor: pointer; }
+
+/* switch row (card sheet) */
+.switch-row { flex: none; height: auto; line-height: 1.3; display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 56px; padding: 10px 14px; border: 2px solid var(--line); border-radius: var(--r-ctl); background: var(--sign); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.switch-row span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.switch-row b { font-weight: 800; }
+.switch-row small { color: var(--mute); font-weight: 600; font-size: 0.8rem; }
+.switch-row i { flex: none; position: relative; width: 48px; height: 28px; border-radius: 999px; background: var(--field); transition: background-color 160ms ease-out; }
+.switch-row i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--sign); box-shadow: 0 1px 3px rgb(0 0 0 / 0.3); transition: transform 160ms var(--spring); }
+.switch-row.on i { background: var(--teal); }
+.switch-row.on i::after { transform: translateX(20px); }
+.switch-row:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+/* a tall sheet scrolls; its parts keep their height instead of squeezing */
+.sheet > * { flex-shrink: 0; }

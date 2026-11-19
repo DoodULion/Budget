@@ -1,6 +1,7 @@
 import { Fragment, useState, type JSX } from 'react';
 import { useCardOrder } from './useCardOrder';
 import { useHoldDrag } from './useHoldDrag';
+import { payoffForMonth, PAYOFF_NAME } from './cards';
 import { formatCents, monthLabel, monthSummary, roundDiv, type BillRow, type MonthKey } from './calc';
 import Icon from './icons';
 import { centsToAmountInput, dayLabel, parseCents } from './money';
@@ -22,6 +23,7 @@ export default function Month({ store, month, today }: { store: Store; month: Mo
   // Days left in the month, today included (calendar math only).
   const [yy, mm] = month.split('-').map(Number);
   const daysLeft = new Date(Date.UTC(yy, mm, 0)).getUTCDate() - Number(today.slice(8, 10)) + 1;
+  const payoff = payoffForMonth(store.data.cards, store.data.purchases, month);
   const perDay = roundDiv(Math.max(0, s.budgetLeftCents), Math.max(1, daysLeft));
 
   async function tick(row: BillRow) {
@@ -114,7 +116,7 @@ export default function Month({ store, month, today }: { store: Store; month: Mo
     categories: (
       <section {...drag('categories', 'card')} aria-labelledby="cat-h">
         <h2 id="cat-h">By category</h2>
-        {s.byCategory.length === 0 ? (
+        {s.byCategory.length === 0 && payoff.byCard.length === 0 ? (
           <p className="empty-line">Add categories under Setup.</p>
         ) : (
           <ul className="cat-rows">
@@ -137,10 +139,23 @@ export default function Month({ store, month, today }: { store: Store; month: Mo
                 </li>
               );
             })}
+            {payoff.byCard.length > 0 && (
+              <li className="cat-row payoff-row">
+                <CatTile category={{ name: PAYOFF_NAME, color: 'c8' }} />
+                <div className="cat-name">
+                  <b>{PAYOFF_NAME}</b>
+                  <span>{payoff.byCard.map((c) => c.card.name).join(', ')} · paid in full</span>
+                </div>
+                <div className="cat-left">
+                  {formatCents(payoff.totalCents)}
+                  <small>this month</small>
+                </div>
+              </li>
+            )}
           </ul>
         )}
+        {payoff.byCard.length > 0 && <p className="muted small">The payoff is what your pay-in-full cards charged this month. It is already counted in the categories above, so Spent doesn't count it twice.</p>}
       </section>
-
     ),
     bills: (
       <section {...drag('bills', 'card')} aria-labelledby="bills-h">
