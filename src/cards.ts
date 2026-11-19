@@ -35,6 +35,11 @@ export interface CreditCard {
   plannedPaymentCents?: Cents;
   /** Paid off in full every month: each earlier month's statement counts as paid, so there is no interest. */
   payInFull?: boolean;
+  /**
+   * The card is closed from this month: no new purchases can be added to it, and each month's interest is
+   * the APR ÷ 12 on that month's ending balance.
+   */
+  closedMonth?: MonthKey;
   payments: CardPayment[];
 }
 
@@ -76,10 +81,13 @@ export function cardMonths(card: CreditCard, purchases: Purchase[], today: DateK
     const current = month === now;
     const entered = paid.get(month) ?? 0;
     // Pay-in-full cards: the statement coming in is paid during the month (once the month is over).
-    const p = card.payInFull && !current && opening > entered ? opening : entered;
+    const closed = card.closedMonth !== undefined && month >= card.closedMonth;
+    const p = card.payInFull && !closed && !current && opening > entered ? opening : entered;
+    // A closed card charges interest on the month's ending balance. Otherwise interest is on what is left
+    // of last statement after payments, and none when that statement was paid in full.
     const unpaid = opening - p;
-    const paidInFull = opening > 0 ? unpaid <= 0 : undefined;
-    const interestCents = current || paidInFull !== false ? 0 : monthlyInterestCents(unpaid, card.aprBps);
+    const paidInFull = closed ? undefined : opening > 0 ? unpaid <= 0 : undefined;
+    const interestCents = current ? 0 : closed ? monthlyInterestCents(opening + c - p, card.aprBps) : paidInFull !== false ? 0 : monthlyInterestCents(unpaid, card.aprBps);
     const closingCents = opening + c - p + interestCents;
     rows.push({ month, openingCents: opening, chargesCents: c, paymentsCents: p, interestCents, closingCents, paidInFull, current });
     opening = closingCents;
@@ -117,7 +125,9 @@ export interface CardSummary {
   /** Last month's closing balance: pay this in full this month to avoid interest. */
   statementCents: Cents;
   leftToAvoidInterestCents: Cents;
-  /** Interest added at the end of this month if the rest of the statement stays unpaid. */
+  /** Closed account (see `closedMonth`). */
+  closed: boolean;
+  /** Interest added at the end of this month: if the rest of the statement stays unpaid, or on the ending balance of a closed card. */
   projectedInterestCents: Cents;
   chargesThisMonthCents: Cents;
   chargesThisYearCents: Cents;
@@ -158,6 +168,7 @@ export function cardSummary(card: CreditCard, purchases: Purchase[], today: Date
   const finished = rows.filter((r) => !r.current);
   const statements = finished.filter((r) => r.paidInFull !== undefined);
   const avgPaymentCents = finished.length ? roundDiv(sum(finished, (r) => r.paymentsCents), finished.length) : 0;
+  const closed = card.closedMonth !== undefined && card.closedMonth <= now;
   const payoffPaymentCents = card.plannedPaymentCents || linked.billAmountCents || avgPaymentCents || undefined;
 
   const cats = new Map<string, Cents>();
@@ -172,7 +183,8 @@ export function cardSummary(card: CreditCard, purchases: Purchase[], today: Date
     balanceNowCents,
     statementCents,
     leftToAvoidInterestCents,
-    projectedInterestCents: monthlyInterestCents(leftToAvoidInterestCents, card.aprBps),
+    projectedInterestCents: closed ? monthlyInterestCents(balanceNowCents, card.aprBps) : monthlyInterestCents(leftToAvoidInterestCents, card.aprBps),
+    closed,
     chargesThisMonthCents: cur?.chargesCents ?? 0,
     chargesThisYearCents: sum(thisYear, (r) => r.chargesCents),
     chargesAllCents: sum(rows, (r) => r.chargesCents),
@@ -188,7 +200,7 @@ export function cardSummary(card: CreditCard, purchases: Purchase[], today: Date
     payoffUsesAverage: !card.plannedPaymentCents && !linked.billAmountCents && !!avgPaymentCents,
     payoffUsesBill: !card.plannedPaymentCents && !!linked.billAmountCents,
     billPayments: linked.payments,
-    payoff: card.payInFull ? { kind: 'full' } : payoff(balanceNowCents, card.aprBps, payoffPaymentCents, now),
+    payoff: card.payInFull && !closed ? { kind: 'full' } : payoff(balanceNowCents, card.aprBps, payoffPaymentCents, now),
     byCategory: [...cats].map(([categoryId, cents]) => ({ categoryId, cents })).sort((a, b) => b.cents - a.cents),
   };
 }

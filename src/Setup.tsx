@@ -521,7 +521,7 @@ function PaidWithCard({ store, step }: { store: Store; step?: number }) {
             <li key={m}>
               <button type="button" className="li-main li-tap" onClick={() => setEditing(m)} aria-label={`Edit ${m}`}>
                 <b>{m}</b>
-                {store.data.cards.some((c) => c.name === m) && <span>Credit card</span>}
+                {store.data.cards.some((c) => c.name === m) && <span>{store.data.cards.some((c) => c.name === m && c.closedMonth !== undefined) ? 'Credit card · closed, hidden from Add' : 'Credit card'}</span>}
               </button>
               <button type="button" className="more" aria-label={`Edit ${m}`} aria-haspopup="dialog" onClick={() => setEditing(m)}>
                 <Icon name="dots" />

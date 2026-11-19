@@ -161,7 +161,7 @@ export default function PurchaseForm({
             <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
               <span>Paid with</span>
               <div className="chips scroll-row" role="radiogroup" aria-label="Paid with">
-                {data.settings.paidWith.map((m) => (
+                {data.settings.paidWith.filter((m) => m === initial?.paidWith || !data.cards.some((c) => c.name === m && c.closedMonth !== undefined)).map((m) => (
                   <button key={m} type="button" role="radio" aria-checked={m === paidWith} className={m === paidWith ? 'on' : ''} onClick={() => setPaidWith(m === paidWith ? '' : m)}>
                     {m}
                   </button>

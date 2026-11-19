@@ -175,3 +175,36 @@ describe('bills linked to a card', () => {
     expect(linkedBills({ ...closed, id: 'other' }, { bills, months }, today).payments).toEqual([]);
   });
 });
+
+describe('closed card', () => {
+  const closed: CreditCard = {
+    id: 'cl',
+    name: 'Closed Card',
+    aprBps: 2400,
+    startBalanceCents: 100_000,
+    startMonth: '2027-01',
+    closedMonth: '2027-01',
+    payments: [{ id: 'p', date: '2027-01-20', amountCents: 30_000 }],
+  };
+  it('charges interest every month on the ending balance', () => {
+    const rows = cardMonths(closed, [], today);
+    expect(rows[0]).toMatchObject({ openingCents: 100_000, paymentsCents: 30_000, interestCents: 1_400, closingCents: 71_400, paidInFull: undefined });
+    expect(rows[1]).toMatchObject({ paymentsCents: 0, interestCents: 1_428, closingCents: 72_828 }); // nothing paid: interest on the whole balance
+    expect(rows[2]).toMatchObject({ closingCents: 72_828, interestCents: 0, current: true });
+  });
+  it('counts charges from before it closed in the ending balance', () => {
+    const rows = cardMonths(closed, [buy('x', '2027-01-03', 10_000, 'Closed Card')], today);
+    expect(rows[0]).toMatchObject({ chargesCents: 10_000, interestCents: 1_600, closingCents: 81_600 }); // $1,000 + $100 − $300 = $800 × 2%
+  });
+  it('is flagged, projects interest on the balance, and ignores pay in full', () => {
+    const s = cardSummary({ ...closed, payInFull: true }, [], today);
+    expect(s.closed).toBe(true);
+    expect(s.projectedInterestCents).toBe(1_457); // 728.28 × 2%
+    expect(s.payoff.kind).not.toBe('full');
+  });
+  it('only starts on its closed month', () => {
+    const later = cardMonths({ ...closed, closedMonth: '2027-02' }, [], today);
+    expect(later[0].interestCents).toBe(1_400); // January still works like an open card: $700 left of the statement
+    expect(later[1].interestCents).toBe(1_428);
+  });
+});

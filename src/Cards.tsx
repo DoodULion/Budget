@@ -211,6 +211,8 @@ function Overview({ summaries, today, onOpen }: { summaries: CardSummary[]; toda
 
 function payoffShort(s: CardSummary): string {
   const p = s.payoff;
+  if (s.closed && p.kind === 'months') return `Closed · paid off ${monthLabel(p.lastMonth)}`;
+  if (s.closed && p.kind === 'noPlan') return 'Closed';
   if (p.kind === 'full') return 'Paid in full monthly';
   if (p.kind === 'clear') return 'Paid off';
   if (p.kind === 'noPlan') return 'Set a monthly payment';
@@ -257,7 +259,9 @@ function CardDetail({
     balance: (
       <section {...drag('balance', 'card hero')} aria-labelledby="bal-h">
         <div className="card-head">
-          <h2 id="bal-h">{card.name} balance</h2>
+          <h2 id="bal-h">
+            {card.name} balance {s.closed && <span className="pill idle">Closed</span>}
+          </h2>
           <button type="button" className="more" onClick={onEdit} aria-label={`Edit ${card.name}`} aria-haspopup="dialog">
             <Icon name="dots" />
           </button>
@@ -283,10 +287,22 @@ function CardDetail({
     statement: (
       <section {...drag('statement', 'card')} aria-labelledby="st-h">
         <div className="card-head">
-          <h2 id="st-h">This month's statement</h2>
-          {s.statementCents > 0 && <span className={`pill${s.leftToAvoidInterestCents > 0 ? ' idle' : ''}`}>{s.leftToAvoidInterestCents > 0 ? (card.payInFull ? 'Due' : 'Unpaid') : 'Paid'}</span>}
+          <h2 id="st-h">{s.closed ? 'This month' : "This month's statement"}</h2>
+          {!s.closed && s.statementCents > 0 && <span className={`pill${s.leftToAvoidInterestCents > 0 ? ' idle' : ''}`}>{s.leftToAvoidInterestCents > 0 ? (card.payInFull ? 'Due' : 'Unpaid') : 'Paid'}</span>}
         </div>
-        {s.statementCents === 0 ? (
+        {s.closed ? (
+          <>
+            <dl className="kv">
+              <dt>Balance so far</dt>
+              <dd>{formatCents(s.balanceNowCents)}</dd>
+              <dt>Interest added at the end of {monthLabel(nowMonth)}</dt>
+              <dd>about {formatCents(s.projectedInterestCents)}</dd>
+            </dl>
+            <p className="muted small">
+              This account is closed, so nothing new is charged. Each month {formatApr(card.aprBps)} ÷ 12 is added to that month's ending balance.
+            </p>
+          </>
+        ) : s.statementCents === 0 ? (
           <p className="muted">Nothing was owed at the start of {monthLabel(nowMonth)}, so no interest this month.</p>
         ) : (
           <>
@@ -608,6 +624,8 @@ function CardSheet({
   const [limit, setLimit] = useState(card?.limitCents ? centsToAmountInput(card.limitCents) : '');
   const [plan, setPlan] = useState(card?.plannedPaymentCents ? centsToAmountInput(card.plannedPaymentCents) : '');
   const [full, setFull] = useState(card?.payInFull ?? false);
+  const [closed, setClosed] = useState(card?.closedMonth !== undefined);
+  const [closedMonth, setClosedMonth] = useState(card?.closedMonth ?? today.slice(0, 7));
   const [tried, setTried] = useState(false);
   const [confirm, setConfirm] = useState(false);
 
@@ -629,6 +647,7 @@ function CardSheet({
     limit.trim() !== '' && lim === undefined && 'Enter the limit as an amount',
     plan.trim() !== '' && pl === undefined && 'Enter the monthly payment as an amount',
     !/^\d{4}-(0[1-9]|1[0-2])$/.test(start) && 'Pick the month you start tracking',
+    closed && !/^\d{4}-(0[1-9]|1[0-2])$/.test(closedMonth) && 'Pick the month the account closed',
   ].filter(Boolean) as string[];
 
   async function save() {
@@ -644,7 +663,8 @@ function CardSheet({
     };
     if (lim) next.limitCents = lim;
     if (pl) next.plannedPaymentCents = pl;
-    if (full) next.payInFull = true;
+    if (full && !closed) next.payInFull = true;
+    if (closed) next.closedMonth = closedMonth < start ? start : closedMonth;
     await store.saveCard(next, card?.name);
     if (card) offer(`Saved ${next.name}`, () => store.saveCard(card, next.name));
     else offer(`Added ${next.name}`, () => store.removeCard(next.id));
@@ -727,13 +747,28 @@ function CardSheet({
           <span>Tracking since</span>
           <input type="month" value={start} onChange={(e) => setStart(e.target.value)} />
         </label>
-        <button type="button" role="switch" aria-checked={full} className={`switch-row${full ? ' on' : ''}`} onClick={() => setFull(!full)}>
+        <button type="button" role="switch" aria-checked={closed} className={`switch-row${closed ? ' on' : ''}`} onClick={() => setClosed(!closed)}>
           <span>
-            <b>Paid in full every month</b>
-            <small>No interest. Each month's balance shows as "Credit Card payoff" on Summary.</small>
+            <b>Closed account</b>
+            <small>No new purchases can be added. Interest is charged every month on the month's ending balance.</small>
           </span>
           <i aria-hidden="true" />
         </button>
+        {closed && (
+          <label className="field">
+            <span>Closed since</span>
+            <input type="month" value={closedMonth} onChange={(e) => setClosedMonth(e.target.value)} />
+          </label>
+        )}
+        {!closed && (
+          <button type="button" role="switch" aria-checked={full} className={`switch-row${full ? ' on' : ''}`} onClick={() => setFull(!full)}>
+            <span>
+              <b>Paid in full every month</b>
+              <small>No interest. Each month's balance shows as "Credit Card payoff" on Summary.</small>
+            </span>
+            <i aria-hidden="true" />
+          </button>
+        )}
         <p className="muted small">
           Purchases tagged with this card under Paid with, dated {monthLabel(start)} or later, add to the balance. Enter what you owed at the start of that month. The planned payment drives the payoff
           date; without it the average of your payments is used.
