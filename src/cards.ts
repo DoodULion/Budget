@@ -57,6 +57,10 @@ export interface CreditCard {
   closedMonth?: MonthKey;
   /** The minimum monthly payment. It appears in the fixed bills as "<name> payment" and is kept in step (see debtBill). */
   minPaymentCents?: Cents;
+  /** The day the balance was paid off with "Pay off balance". Once the balance is zero, the minimum payment bill and autopay stop (see isPaidOff). */
+  paidOffDate?: DateKey;
+  /** Interest saved by paying off early instead of making only the minimum, worked out when "Pay off balance" was recorded. */
+  interestSavedCents?: Cents;
   payments: CardPayment[];
 }
 
@@ -135,6 +139,23 @@ export function payoff(balanceCents: Cents, aprBps: number, monthlyCents: Cents 
   }
   return { kind: 'never' };
 }
+
+export type InterestSaved = { kind: 'saved'; cents: Cents; months: number; minimumCents: Cents } | { kind: 'never'; minimumCents: Cents };
+
+/**
+ * What paying off now saves compared with paying only the minimum every month from this month until it is gone
+ * (the interest those minimums would still have added). Undefined when there is no minimum to compare with.
+ */
+export function interestSaved(balanceCents: Cents, aprBps: number, minimumCents: Cents | undefined, thisMonth: MonthKey): InterestSaved | undefined {
+  if (balanceCents <= 0 || !minimumCents || minimumCents <= 0) return undefined;
+  const p = payoff(balanceCents, aprBps, minimumCents, thisMonth);
+  if (p.kind === 'months') return { kind: 'saved', cents: p.interestCents, months: p.months, minimumCents };
+  if (p.kind === 'never') return { kind: 'never', minimumCents };
+  return undefined;
+}
+
+/** The minimum payment to compare with: the debt's own, else what its linked bills add up to. */
+export const minimumFor = (card: CreditCard, linked: LinkedBills): Cents | undefined => card.minPaymentCents || linked.billAmountCents || undefined;
 
 export interface CardSummary {
   card: CreditCard;
@@ -302,6 +323,40 @@ export function payoffForMonth(cards: CreditCard[], purchases: Purchase[], month
     .filter((c) => c.payInFull)
     .map((card) => ({ card, cents: cardCharges(card, purchases).filter((p) => monthOf(p.date) === month).reduce((s, p) => s + p.amountCents, 0) }));
   return { totalCents: byCard.reduce((s, c) => s + c.cents, 0), byCard };
+}
+
+/**
+ * Paid off: nothing owed and either paid off on purpose ("Pay off balance") or a loan / closed card whose payments have cleared it.
+ * A credit card that is still open and merely at $0 (say, between charges) is not paid off unless it was paid off on purpose.
+ */
+export function isPaidOff(card: CreditCard, s: Pick<CardSummary, 'balanceNowCents' | 'paymentsAllCents' | 'closed'>): boolean {
+  return s.balanceNowCents <= 0 && (card.paidOffDate !== undefined || (s.closed && s.paymentsAllCents > 0));
+}
+
+/** The ids of the debts that are paid off. */
+export function paidOffIds(data: Data, today: DateKey): Set<string> {
+  return new Set(data.cards.filter((c) => isPaidOff(c, cardSummary(c, data.purchases, today, linkedBills(c, data, today)))).map((c) => c.id));
+}
+
+/**
+ * Keeps the minimum payment bills in step with how the debts stand: a paid-off debt's bill is removed, and an open
+ * debt that has a minimum but no bill (a bill removed because it was paid off, then a new balance) gets it back.
+ */
+export function debtBillChanges(data: Data, today: DateKey): { put: Bill[]; remove: string[] } {
+  const paidOff = paidOffIds(data, today);
+  const put: Bill[] = [];
+  const remove: string[] = [];
+  for (const card of data.cards) {
+    const existing = data.bills.find((b) => b.id === debtBillId(card.id));
+    const live = existing && !existing.deleted ? existing : undefined;
+    if (paidOff.has(card.id)) {
+      if (live) remove.push(live.id);
+    } else if (!live) {
+      const bill = debtBill(card, existing);
+      if (bill) put.push(bill);
+    }
+  }
+  return { put, remove };
 }
 
 /** The id of the fixed bill that carries a debt's minimum payment. */

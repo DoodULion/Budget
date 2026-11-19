@@ -766,3 +766,5 @@ html[data-nav] .band-in { animation: none; } /* the whole screen is already slid
 .switch-row:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 /* a tall sheet scrolls; its parts keep their height instead of squeezing */
 .sheet > * { flex-shrink: 0; }
+.saved-line { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0 0; padding: 12px 14px; border-radius: 16px; background: var(--field); color: var(--ink); font-size: 15px; }
+.saved-line .icon { flex: none; color: var(--good, #1d7a4a); margin-top: 2px; }

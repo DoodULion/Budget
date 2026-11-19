@@ -1,5 +1,5 @@
 import { Fragment, useState, type JSX } from 'react';
-import { cardSummary, DEBT_KINDS, debtLabel, formatApr, isLoan, linkedBills, type DebtKind, monthlyInterestCents, parseApr, payoff, projection, totalSeries, type CardPayment, type CardSummary, type CreditCard } from './cards';
+import { cardSummary, DEBT_KINDS, interestSaved, isPaidOff, minimumFor, debtLabel, formatApr, isLoan, linkedBills, type DebtKind, monthlyInterestCents, parseApr, payoff, projection, totalSeries, type CardPayment, type CardSummary, type CreditCard } from './cards';
 import { formatCents, monthLabel, type Category, type MonthKey } from './calc';
 import Icon from './icons';
 import { centsToAmountInput, dayLabel, newId, parseCents } from './money';
@@ -27,6 +27,8 @@ export default function Cards({ store, today }: { store: Store; today: string })
   const [sel, setSel] = useState('all');
   const [editing, setEditing] = useState<CreditCard | 'new' | null>(null);
   const [paying, setPaying] = useState<{ card: CreditCard; payment?: CardPayment } | null>(null);
+  const [menu, setMenu] = useState<CreditCard | null>(null);
+  const [payingOff, setPayingOff] = useState<CardSummary | null>(null);
   const summaries = cards.map((c) => cardSummary(c, purchases, today, linkedBills(c, store.data, today)));
   const one = summaries.length === 1 ? summaries[0] : summaries.find((s) => s.card.id === sel);
 
@@ -60,7 +62,7 @@ export default function Cards({ store, today }: { store: Store; today: string })
             </div>
           )}
           {one ? (
-            <CardDetail key={one.card.id} s={one} categories={categories} today={today} onEdit={() => setEditing(one.card)} onPay={(payment) => setPaying({ card: one.card, payment })} />
+            <CardDetail key={one.card.id} s={one} categories={categories} today={today} onEdit={() => setEditing(one.card)} onMenu={() => setMenu(one.card)} onPay={(payment) => setPaying({ card: one.card, payment })} />
           ) : (
             <Overview summaries={summaries} today={today} onOpen={(id) => setSel(id)} />
           )}
@@ -71,6 +73,37 @@ export default function Cards({ store, today }: { store: Store; today: string })
         </>
       )}
       {editing && <CardSheet store={store} card={editing === 'new' ? undefined : editing} today={today} onClose={() => setEditing(null)} onSaved={(c) => setSel(c.id)} />}
+      {menu && (
+        <SheetBackdrop onClose={() => setMenu(null)}>
+          <div className="sheet menu" role="dialog" aria-modal="true" aria-label={`Options for ${menu.name}`}>
+            <h2>{menu.name}</h2>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                setEditing(menu);
+                setMenu(null);
+              }}
+            >
+              Edit {isLoan(menu) ? debtLabel(menu).toLowerCase() : 'card'}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setPayingOff(summaries.find((x) => x.card.id === menu.id) ?? null);
+                setMenu(null);
+              }}
+            >
+              Pay off balance
+            </button>
+            <button type="button" className="secondary" onClick={() => setMenu(null)}>
+              Cancel
+            </button>
+          </div>
+        </SheetBackdrop>
+      )}
+      {payingOff && <PayoffSheet store={store} s={payingOff} today={today} onClose={() => setPayingOff(null)} />}
       {paying && <PaymentSheet store={store} card={paying.card} payment={paying.payment} today={today} onClose={() => setPaying(null)} />}
     </div>
   );
@@ -227,12 +260,14 @@ function CardDetail({
   categories,
   today,
   onEdit,
+  onMenu,
   onPay,
 }: {
   s: CardSummary;
   categories: Category[];
   today: string;
   onEdit: () => void;
+  onMenu: () => void;
   onPay: (payment?: CardPayment) => void;
 }) {
   const { drag, grid } = useArrange('card-detail', DETAIL);
@@ -258,9 +293,10 @@ function CardDetail({
       <section {...drag('balance', 'card hero')} aria-labelledby="bal-h">
         <div className="card-head">
           <h2 id="bal-h">
-            {card.name} balance {s.loan ? <span className="pill idle">{debtLabel(card)}</span> : s.closed && <span className="pill idle">Closed</span>}
+            {card.name} balance{' '}
+            {isPaidOff(card, s) ? <span className="pill">Paid off</span> : s.loan ? <span className="pill idle">{debtLabel(card)}</span> : s.closed && <span className="pill idle">Closed</span>}
           </h2>
-          <button type="button" className="more" onClick={onEdit} aria-label={`Edit ${card.name}`} aria-haspopup="dialog">
+          <button type="button" className="more" onClick={onMenu} aria-label={`Options for ${card.name}`} aria-haspopup="dialog">
             <Icon name="dots" />
           </button>
         </div>
@@ -354,7 +390,16 @@ function CardDetail({
             This card is paid in full every month, so there is no payoff date and no interest. Pay the {formatCents(s.statementCents)} statement and the balance starts over with new purchases.
           </p>
         )}
-        {s.payoff.kind === 'clear' && <p className="muted">No balance to pay off.</p>}
+        {s.payoff.kind === 'clear' && (
+          <>
+            <p className="muted">{card.paidOffDate ? `Paid off ${dayLabel(card.paidOffDate)}.` : 'No balance to pay off.'}</p>
+            {card.paidOffDate && card.interestSavedCents !== undefined && (
+              <p className="whatif">
+                <b>{formatCents(card.interestSavedCents)} interest saved</b> by paying off early instead of making only the minimum
+              </p>
+            )}
+          </>
+        )}
         {s.payoff.kind === 'noPlan' && (
           <>
             <p className="muted">Enter what you plan to pay each month to see a payoff date.</p>
@@ -374,7 +419,7 @@ function CardDetail({
             <p className="big-sm">{monthLabel(s.payoff.lastMonth)}</p>
             <p className="muted">
               {s.payoff.months} payment{s.payoff.months === 1 ? '' : 's'} of {formatCents(plan ?? 0)}
-              {s.payoffUsesBill ? ' (your linked bill)' : s.payoffUsesAverage ? ' (your average so far)' : ''} · about {formatCents(s.payoff.interestCents)} more interest, if nothing new is charged.
+              {s.payoffUsesBill ? ' (your linked bill)' : s.payoffUsesAverage ? ' (your average so far)' : ''} · about {formatCents(s.payoff.interestCents)} more interest, counted every month on what is left, if nothing new is charged. You would pay {formatCents(s.balanceNowCents + s.payoff.interestCents)} in all.
             </p>
             {[5_000, 10_000].map((extra) => {
               const w = whatIf(extra);
@@ -694,6 +739,8 @@ function CardSheet({
     if (lim && !loan) next.limitCents = lim;
     if (pl) next.plannedPaymentCents = pl;
     if (mn) next.minPaymentCents = mn;
+    if (card?.paidOffDate) next.paidOffDate = card.paidOffDate;
+    if (card?.interestSavedCents !== undefined) next.interestSavedCents = card.interestSavedCents;
     if (full && !closed && !loan) next.payInFull = true;
     if (closed && !loan) next.closedMonth = closedMonth < start ? start : closedMonth;
     await store.saveCard(next, card?.name);
@@ -843,6 +890,101 @@ function CardSheet({
           )}
           <button type="button" className="secondary" onClick={onClose}>
             Discard changes
+          </button>
+        </div>
+      </form>
+    </SheetBackdrop>
+  );
+}
+
+function PayoffSheet({ store, s, today, onClose }: { store: Store; s: CardSummary; today: string; onClose: () => void }) {
+  const { card } = s;
+  const { offer } = useUndo();
+  const [amount, setAmount] = useState(s.balanceNowCents > 0 ? centsToAmountInput(s.balanceNowCents) : '');
+  const [date, setDate] = useState(today);
+  const [tried, setTried] = useState(false);
+  const cents = parseCents(amount);
+  const billsToStop = store.data.bills.filter((b) => b.cardId === card.id && !b.deleted);
+  const saved = interestSaved(s.balanceNowCents, card.aprBps, minimumFor(card, linkedBills(card, store.data, today)), today.slice(0, 7));
+  const errors = [
+    s.balanceNowCents <= 0 && 'Nothing is owed on this debt',
+    (cents === undefined || cents === 0) && 'Enter the amount you are paying',
+    !date && 'Pick the date',
+    date && date.slice(0, 7) < card.startMonth && `That is before you started tracking (${monthLabel(card.startMonth)})`,
+  ].filter(Boolean) as string[];
+
+  async function save() {
+    setTried(true);
+    if (errors.length || cents === undefined) return;
+    const clears = cents >= s.balanceNowCents;
+    const next: CreditCard = { ...card, payments: [...card.payments, { id: newId(), date, amountCents: cents }] };
+    if (clears) {
+      next.paidOffDate = date;
+      if (saved?.kind === 'saved') next.interestSavedCents = saved.cents;
+      else delete next.interestSavedCents;
+    }
+    await store.saveCard(next);
+    offer(cents >= s.balanceNowCents ? `${card.name} paid off` : `Payment recorded on ${card.name}`, () => store.saveCard(card));
+    onClose();
+  }
+
+  return (
+    <SheetBackdrop onClose={onClose}>
+      <form
+        className="sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="po-sheet-h"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        <h2 id="po-sheet-h">Pay off {card.name}</h2>
+        <dl className="kv">
+          <dt>Balance now</dt>
+          <dd>{formatCents(s.balanceNowCents)}</dd>
+        </dl>
+        <div className="grid2">
+          <label className="field">
+            <span>Amount paid</span>
+            <MoneyInput value={amount} onValue={setAmount} placeholder="0.00" />
+          </label>
+          <label className="field">
+            <span>Date</span>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </label>
+        </div>
+        {saved?.kind === 'saved' && (
+          <p className="saved-line" role="status">
+            <Icon name="check" />
+            <span>
+              Paying it off now saves about <b>{formatCents(saved.cents)}</b> in interest. With only the {formatCents(saved.minimumCents)} minimum it would take {saved.months} more payment{saved.months === 1 ? '' : 's'}.
+            </span>
+          </p>
+        )}
+        {saved?.kind === 'never' && (
+          <p className="saved-line" role="status">
+            <Icon name="check" />
+            <span>The {formatCents(saved.minimumCents)} minimum would never clear this balance, so paying it off now saves all the interest it would keep adding.</span>
+          </p>
+        )}
+        <p className="muted small">
+          This records the payment on {card.name} and lowers its balance.
+          {billsToStop.length > 0 && ` Once the balance is zero, ${billsToStop.map((b) => `"${b.name}"`).join(', ')} comes off your fixed bills and its autopay stops.`}
+        </p>
+        {tried && errors.length > 0 && (
+          <p className="error" role="alert">
+            {errors.join(' · ')}
+          </p>
+        )}
+        <div className="sheet-actions">
+          <button type="submit" className="primary" disabled={s.balanceNowCents <= 0}>
+            Record payoff
+          </button>
+          <button type="button" className="secondary" onClick={onClose}>
+            Cancel
           </button>
         </div>
       </form>

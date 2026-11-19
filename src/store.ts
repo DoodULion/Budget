@@ -42,6 +42,8 @@ export interface Store {
   removeCategory: (id: string) => Promise<void>;
   setIncome: (month: MonthKey, incomeCents: number | undefined) => Promise<void>;
   setPayment: (month: MonthKey, billId: string, payment: BillPayment | undefined) => Promise<void>;
+  /** Add or replace bills, and remove others (kept on months where they were paid). Used to keep debt minimum payments in step. */
+  applyBillChanges: (put: Bill[], remove: string[]) => Promise<void>;
   /** Save whole month records (used by autopay). */
   putMonths: (months: Month[]) => Promise<void>;
   putPurchase: (purchase: Purchase) => Promise<void>;
@@ -254,6 +256,31 @@ export function useStore(): AppState {
           return withMonth(d, rec);
         });
         if (rec) await db.putMonth(rec);
+      },
+      async applyBillChanges(put: Bill[], remove: string[]) {
+        if (put.length === 0 && remove.length === 0) return;
+        const writes: Bill[] = [...put];
+        const deletes: string[] = [];
+        update((d) => {
+          writes.length = put.length;
+          deletes.length = 0;
+          let bills = d.bills;
+          for (const b of put) bills = bills.some((x) => x.id === b.id) ? bills.map((x) => (x.id === b.id ? b : x)) : [...bills, b];
+          for (const id of remove) {
+            const bill = bills.find((b) => b.id === id);
+            if (!bill) continue;
+            if (d.months.some((m) => m.payments[id])) {
+              const gone = { ...bill, deleted: true };
+              writes.push(gone);
+              bills = bills.map((b) => (b.id === id ? gone : b));
+            } else {
+              deletes.push(id);
+              bills = bills.filter((b) => b.id !== id);
+            }
+          }
+          return { ...d, bills };
+        });
+        await Promise.all([...writes.map(db.putBill), ...deletes.map(db.deleteBill)]);
       },
       async putMonths(months: Month[]) {
         if (months.length === 0) return;

@@ -89,6 +89,8 @@ export function parseBackup(text: string): Data {
         (c.closedMonth === undefined || isMonth(c.closedMonth)) &&
         (c.kind === undefined || ['credit-card', 'personal-loan', 'student-loan', 'auto-loan', 'other'].includes(c.kind as string)) &&
         optInt(c.minPaymentCents) &&
+        (c.paidOffDate === undefined || isDate(c.paidOffDate)) &&
+        optInt(c.interestSavedCents) &&
         Array.isArray(c.payments) &&
         c.payments.every((p) => isObj(p) && isStr(p.id) && isDate(p.date) && isInt(p.amountCents)),
     ),

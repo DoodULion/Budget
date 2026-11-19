@@ -269,6 +269,13 @@ describe('autopay', () => {
     expect(billRows(d, '2027-02')[0].status).toBe('unpaid');
   });
 
+  it('skips bills that pay a paid-off debt', () => {
+    const d = base();
+    d.bills[0].cardId = 'car';
+    expect(autopayMonths(d, '2027-02-15', new Set(['car']))).toEqual([]);
+    expect(autopayMonths(d, '2027-02-15', new Set(['other'])).map((m) => m.month)).toEqual(['2027-01', '2027-02']);
+  });
+
   it('keeps the other bills and records of a month it fills in', () => {
     const d = base();
     d.bills.push({ id: 'phone', name: 'Phone', amountCents: 5_000 });

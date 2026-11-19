@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Month, Purchase } from './calc';
-import { cardMonths, cardSummary, debtBill, debtLabel, formatApr, isLoan, linkedBills, parseApr, payoff, payoffForMonth, projection, totalSeries, type CreditCard } from './cards';
+import type { Data } from './calc';
+import { cardMonths, cardSummary, debtBill, debtBillChanges, interestSaved, isPaidOff, minimumFor, paidOffIds, debtLabel, formatApr, isLoan, linkedBills, parseApr, payoff, payoffForMonth, projection, totalSeries, type CreditCard } from './cards';
 
 // Made-up figures only.
 const card: CreditCard = {
@@ -250,5 +251,67 @@ describe('loans and minimum payments', () => {
     expect(debtBill({ ...loan, minPaymentCents: undefined })).toBeUndefined();
     expect(debtBill({ ...card, minPaymentCents: 2_500, payInFull: true })).toBeUndefined();
     expect(debtBill({ ...card, minPaymentCents: 2_500 })).toMatchObject({ name: 'Test Visa payment', amountCents: 2_500 });
+  });
+});
+
+describe('paying off a debt', () => {
+  const loan: CreditCard = {
+    id: 'car',
+    kind: 'auto-loan',
+    name: 'Car loan',
+    aprBps: 600,
+    startBalanceCents: 100_000,
+    startMonth: '2027-01',
+    minPaymentCents: 30_000,
+    payments: [],
+  };
+  const dataOf = (debt: CreditCard, bills = [debtBill(debt)!]): Data => ({ settings: {} as Data['settings'], bills, cards: [debt], categories: [], months: [], purchases: [] });
+  const paidOff: CreditCard = { ...loan, paidOffDate: '2027-01-20', payments: [{ id: 'x', date: '2027-01-20', amountCents: 100_000 }] };
+
+  it('is paid off once the balance is cleared on purpose, or a loan is cleared by payments', () => {
+    expect(paidOffIds(dataOf(paidOff), today).has('car')).toBe(true);
+    expect(paidOffIds(dataOf({ ...paidOff, paidOffDate: undefined }), today).has('car')).toBe(true); // a loan: cleared by payments
+    expect(paidOffIds(dataOf(loan), today).size).toBe(0); // still owes
+  });
+  it('does not treat an open credit card at $0 as paid off unless it was paid off on purpose', () => {
+    const open: CreditCard = { ...card, payments: [{ id: 'z', date: '2027-01-20', amountCents: 100_000 }], plannedPaymentCents: undefined };
+    const s = cardSummary(open, [], '2027-01-25', linkedBills(open, { bills: [], months: [] }, '2027-01-25'));
+    expect(s.balanceNowCents).toBe(0);
+    expect(isPaidOff(open, s)).toBe(false);
+    expect(isPaidOff({ ...open, paidOffDate: '2027-01-20' }, s)).toBe(true);
+  });
+  it('removes the minimum payment bill of a paid-off debt, and brings it back when it owes again', () => {
+    const d = dataOf(paidOff);
+    expect(debtBillChanges(d, today)).toEqual({ put: [], remove: ['debt:car'] });
+    const gone = dataOf(paidOff, []);
+    expect(debtBillChanges(gone, today)).toEqual({ put: [], remove: [] });
+    // owes again (the payment was deleted): the bill returns, keeping what it had
+    expect(debtBillChanges(dataOf({ ...paidOff, payments: [] }, []), today).put.map((b) => b.id)).toEqual(['debt:car']);
+    // a bill marked deleted (kept for months it was paid) is restored too
+    const deleted = { ...debtBill(loan)!, deleted: true };
+    expect(debtBillChanges(dataOf(loan, [deleted]), today).put).toHaveLength(1);
+  });
+});
+
+describe('interest saved by paying off early', () => {
+  it('is the interest the minimums would still have added', () => {
+    // $1,000 at 24%, $50 a month: 3 payments... the same schedule as the payoff estimate (the minimum is the payment)
+    const p = payoff(100_000, 2400, 50_000, '2027-03');
+    const saved = interestSaved(100_000, 2400, 50_000, '2027-03');
+    expect(p.kind).toBe('months');
+    expect(saved).toEqual({ kind: 'saved', cents: p.kind === 'months' ? p.interestCents : -1, months: p.kind === 'months' ? p.months : -1, minimumCents: 50_000 });
+  });
+  it('matches the spec example: $50 a month on $140.00 is 3 payments and $2.64', () => {
+    expect(interestSaved(14_000, 2400, 5_000, '2027-03')).toEqual({ kind: 'saved', cents: 264, months: 3, minimumCents: 5_000 });
+  });
+  it('says never when the minimum does not beat the interest, and nothing without a minimum', () => {
+    expect(interestSaved(1_000_000, 2400, 5_000, '2027-03')).toEqual({ kind: 'never', minimumCents: 5_000 });
+    expect(interestSaved(14_000, 2400, undefined, '2027-03')).toBeUndefined();
+    expect(interestSaved(0, 2400, 5_000, '2027-03')).toBeUndefined();
+  });
+  it('takes the minimum from the debt, else from its linked bills', () => {
+    expect(minimumFor({ ...card, minPaymentCents: 2_500 }, { payments: [], billAmountCents: 9_000 })).toBe(2_500);
+    expect(minimumFor(card, { payments: [], billAmountCents: 9_000 })).toBe(9_000);
+    expect(minimumFor(card, { payments: [], billAmountCents: 0 })).toBeUndefined();
   });
 });

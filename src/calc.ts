@@ -213,13 +213,15 @@ export function autopayDate(month: MonthKey, day: number): DateKey {
 /**
  * Autopay: the month records that need a payment recorded. For every bill with autopay, each active month from
  * `since` (not before the first tracked month) up to today's, whose autopay date has arrived and that has no
- * payment entry yet (not even a "skipped" one), gets the bill paid on that date. Returns the full records of the months that change.
+ * payment entry yet (not even a "skipped" one), gets the bill paid on that date. Bills that pay a debt in `skipDebts` (paid off) are left out.
+ * Returns the full records of the months that change.
  */
-export function autopayMonths(data: Data, today: DateKey): Month[] {
+export function autopayMonths(data: Data, today: DateKey, skipDebts: ReadonlySet<string> = new Set()): Month[] {
   const now = monthOf(today);
   const out = new Map<MonthKey, Month>();
   for (const bill of data.bills) {
     if (!bill.autoPay || bill.deleted) continue;
+    if (bill.cardId && skipDebts.has(bill.cardId)) continue; // the debt it pays is paid off
     for (const month of monthRange(bill.autoPay.since > data.settings.firstMonth ? bill.autoPay.since : data.settings.firstMonth, now)) {
       if (!isBillActive(bill, month)) continue;
       const date = autopayDate(month, bill.autoPay.day);
