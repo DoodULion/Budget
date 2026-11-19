@@ -409,7 +409,7 @@ function ResultSheet({ before, after, change, title, end, savingsGoalCents, onEd
           <p className="big fit" style={{ ['--chars' as string]: Math.max(formatCents(after.endCashCents).length, 4) }}>
             {formatCents(after.endCashCents)}
           </p>
-          <p className="muted">{dCash === 0 ? 'The same as without it' : `${signed(dCash)} compared with without ${change ? 'this change' : 'the changes'}`}</p>
+          <p className="muted">{dCash === 0 ? 'The same as without it' : `${signed(dCash)} vs. without ${change ? 'this change' : 'the changes'}`}</p>
         </div>
         <dl className="kv">
           {impact && (
@@ -420,7 +420,7 @@ function ResultSheet({ before, after, change, title, end, savingsGoalCents, onEd
               <dd className="fig-pos">{formatCents(impact.interestSavedCents)}</dd>
               {impact.freedCents > 0 && (
                 <>
-                  <dt>Freed up a month after</dt>
+                  <dt>Freed up each month after</dt>
                   <dd className="fig-pos">{formatCents(impact.freedCents)}</dd>
                 </>
               )}
