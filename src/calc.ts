@@ -81,8 +81,14 @@ export interface Data {
 /** Suggested category names for the first-run setup. Names only: budgets start empty. */
 export const SUGGESTED_CATEGORIES = ['Food', 'Shopping', 'Entertainment', 'Misc'];
 
-/** Category tile colors, assigned in order (a fixed, distinguishable set). */
-export const CATEGORY_COLORS = ['#d9480f', '#b83280', '#1f74c7', '#6b46c1', '#0f8a5f', '#b7791f', '#78716c', '#c2410c'];
+/** Category tile color keys (CSS `--cat-<key>`, tuned for light and dark), assigned in order. */
+export const CATEGORY_COLORS = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8'];
+
+/** The next color for a new category: the first one not in use, else cycling. */
+export function nextCategoryColor(categories: Category[]): string {
+  const used = new Set(categories.filter((c) => !c.deleted).map((c) => c.color));
+  return CATEGORY_COLORS.find((k) => !used.has(k)) ?? CATEGORY_COLORS[categories.length % CATEGORY_COLORS.length];
+}
 
 export function emptySettings(firstMonth: MonthKey): Settings {
   return {
