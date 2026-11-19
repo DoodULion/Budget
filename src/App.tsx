@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import Add from './Add';
+import Analytics from './Analytics';
 import Cards from './Cards';
 import { debtBillChanges, paidOffIds } from './cards';
 import { addMonths, autopayMonths, monthLabel, thisMonth, type MonthKey } from './calc';
@@ -13,12 +13,12 @@ import { UndoProvider } from './undo';
 import { useToday } from './useToday';
 import Year from './Year';
 
-type Tab = 'summary' | 'cards' | 'add' | 'purchases' | 'setup';
+type Tab = 'analytics' | 'cards' | 'summary' | 'purchases' | 'setup';
 
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
-  { id: 'summary', label: 'Summary', icon: 'year' },
+  { id: 'analytics', label: 'Analytics', icon: 'year' },
   { id: 'cards', label: 'Debt', icon: 'card' },
-  { id: 'add', label: 'Add', icon: 'add' },
+  { id: 'summary', label: 'Overview', icon: 'month' },
   { id: 'purchases', label: 'Purchases', icon: 'entries' },
   { id: 'setup', label: 'Setup', icon: 'setup' },
 ];
@@ -47,7 +47,7 @@ function Main({ store, today }: { store: Store; today: string }) {
   const { settings } = store.data;
   const current = thisMonth(settings, today);
   const [tab, setTab] = useState<Tab>('summary');
-  // Summary shows a month or a year; Purchases always shows a month (the Summary's month, or the year's last pick).
+  // Overview shows a month or a year; Purchases always shows a month (the Overview's month, or the year's last pick).
   const [view, setView] = useState<Period['kind']>('month');
   const [month, setMonth] = useState<MonthKey>(current);
   const [year, setYear] = useState(Number(current.slice(0, 4)));
@@ -141,8 +141,8 @@ function Main({ store, today }: { store: Store; today: string }) {
               )
             ) : tab === 'cards' ? (
               <Cards store={store} today={today} />
-            ) : tab === 'add' ? (
-              <Add store={store} today={today} />
+            ) : tab === 'analytics' ? (
+              <Analytics store={store} today={today} />
             ) : tab === 'purchases' ? (
               <Purchases store={store} month={month} today={today} />
             ) : (

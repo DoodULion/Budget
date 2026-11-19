@@ -62,9 +62,9 @@ export default function Cards({ store, today }: { store: Store; today: string })
             </div>
           )}
           {one ? (
-            <CardDetail key={one.card.id} s={one} categories={categories} today={today} onEdit={() => setEditing(one.card)} onMenu={() => setMenu(one.card)} onPay={(payment) => setPaying({ card: one.card, payment })} />
+            <CardDetail key={one.card.id} mode="manage" s={one} categories={categories} today={today} onEdit={() => setEditing(one.card)} onMenu={() => setMenu(one.card)} onPay={(payment) => setPaying({ card: one.card, payment })} />
           ) : (
-            <Overview summaries={summaries} today={today} onOpen={(id) => setSel(id)} />
+            <DebtList summaries={summaries} today={today} onOpen={(id) => setSel(id)} />
           )}
           <button type="button" className="add-row" onClick={() => setEditing('new')}>
             <Icon name="add" />
@@ -240,6 +240,101 @@ function Overview({ summaries, today, onOpen }: { summaries: CardSummary[]; toda
   return grid(cards);
 }
 
+/** The Debt tab's list: what is owed on each debt with its minimum payment and interest rate. */
+function DebtList({ summaries, today, onOpen }: { summaries: CardSummary[]; today: string; onOpen: (id: string) => void }) {
+  const { drag, grid } = useArrange('debt-list', ['total', 'list']);
+  const live = summaries.filter((s) => !isPaidOff(s.card, s));
+  const owed = summaries.reduce((t, s) => t + Math.max(0, s.balanceNowCents), 0);
+  const minimums = live.reduce((t, s) => t + (s.card.minPaymentCents ?? 0), 0);
+  const monthlyInterest = summaries.reduce((t, s) => t + monthlyInterestCents(Math.max(0, s.balanceNowCents), s.card.aprBps), 0);
+  const cards: Record<string, JSX.Element> = {
+    total: (
+      <section {...drag('total', 'card hero')} aria-labelledby="owed-h">
+        <h2 id="owed-h">Owed on all debts</h2>
+        <p className="big fit" style={{ ['--chars' as string]: Math.max(formatCents(owed).length, 4) }}>
+          {formatCents(owed)}
+        </p>
+        <div className="rule">
+          <div>
+            <Fig cents={minimums} />
+            <span className="muted">Minimums a month</span>
+          </div>
+          <div>
+            <Fig cents={monthlyInterest} />
+            <span className="muted">Interest a month</span>
+          </div>
+          <div>
+            <Fig text={String(live.length)} />
+            <span className="muted">{live.length === 1 ? 'Debt owed' : 'Debts owed'}</span>
+          </div>
+        </div>
+      </section>
+    ),
+    list: (
+      <section {...drag('list', 'card')} aria-labelledby="list-h">
+        <h2 id="list-h">Your debts</h2>
+        <ul className="debt-list">
+          {summaries.map((s, i) => (
+            <li key={s.card.id} className="debt-row">
+              <CatTile category={{ name: s.card.name, color: colorOf(i) }} />
+              <button type="button" className="main" onClick={() => onOpen(s.card.id)} aria-label={`Open ${s.card.name}`}>
+                <span className="dn">{s.card.name}</span>
+                <span className="db">{formatCents(s.balanceNowCents)}</span>
+                <span className="ds">
+                  {[
+                    isPaidOff(s.card, s) ? 'Paid off' : s.card.minPaymentCents ? `Min ${formatCents(s.card.minPaymentCents)}` : 'No minimum set',
+                    `${formatApr(s.card.aprBps)} APR`,
+                    s.card.dueDay && !isPaidOff(s.card, s) ? `Due the ${s.card.dueDay}${ordinal(s.card.dueDay)}` : undefined,
+                    debtLabel(s.card),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ),
+  };
+  void today;
+  return grid(cards);
+}
+
+/** Debt insights for Analytics: all debts together, or one debt's payoff estimate, charts, interest and month-by-month table. */
+export function DebtAnalytics({ store, today }: { store: Store; today: string }) {
+  const { cards, purchases, categories } = store.data;
+  const [sel, setSel] = useState('all');
+  const summaries = cards.map((c) => cardSummary(c, purchases, today, linkedBills(c, store.data, today)));
+  const one = summaries.length === 1 ? summaries[0] : summaries.find((s) => s.card.id === sel);
+  if (summaries.length === 0) {
+    return (
+      <section className="card">
+        <h2>Debt insights</h2>
+        <p className="muted">Add a credit card or loan on the Debt tab to see payoff dates, balances over time and interest here.</p>
+      </section>
+    );
+  }
+  return (
+    <>
+      {summaries.length > 1 && (
+        <div className="chips scroll-row" role="group" aria-label="Debt">
+          <button type="button" className={one ? '' : 'on'} aria-pressed={!one} onClick={() => setSel('all')}>
+            All debts
+          </button>
+          {summaries.map((s, i) => (
+            <button key={s.card.id} type="button" className={one?.card.id === s.card.id ? 'on' : ''} aria-pressed={one?.card.id === s.card.id} onClick={() => setSel(s.card.id)}>
+              <CatTile category={{ name: s.card.name, color: colorOf(i) }} small />
+              {s.card.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {one ? <CardDetail key={one.card.id} mode="insights" s={one} categories={categories} today={today} /> : <Overview summaries={summaries} today={today} onOpen={(id) => setSel(id)} />}
+    </>
+  );
+}
+
 function payoffShort(s: CardSummary): string {
   const p = s.payoff;
   if (s.closed && !s.loan && p.kind === 'months') return `Closed · paid off ${monthLabel(p.lastMonth)}`;
@@ -253,9 +348,12 @@ function payoffShort(s: CardSummary): string {
 
 /* ---------- one card ---------- */
 
-const DETAIL = ['balance', 'statement', 'payoff', 'chart', 'spending', 'interest', 'categories', 'payments', 'table'] as const;
+/** On the Debt tab a debt shows its balance, statement and payments; the insights (payoff, charts, interest) are on Analytics. */
+const MANAGE = ['balance', 'statement', 'payments'] as const;
+const INSIGHTS = ['payoff', 'chart', 'spending', 'interest', 'categories', 'table'] as const;
 
 function CardDetail({
+  mode,
   s,
   categories,
   today,
@@ -263,14 +361,15 @@ function CardDetail({
   onMenu,
   onPay,
 }: {
+  mode: 'manage' | 'insights';
   s: CardSummary;
   categories: Category[];
   today: string;
-  onEdit: () => void;
-  onMenu: () => void;
-  onPay: (payment?: CardPayment) => void;
+  onEdit?: () => void;
+  onMenu?: () => void;
+  onPay?: (payment?: CardPayment) => void;
 }) {
-  const { drag, grid } = useArrange('card-detail', DETAIL);
+  const { drag, grid } = useArrange(mode === 'manage' ? 'card-detail' : 'card-insights', mode === 'manage' ? MANAGE : INSIGHTS);
   const { card } = s;
   const owedNow = Math.max(0, s.balanceNowCents);
   const nowMonth = today.slice(0, 7);
@@ -296,9 +395,11 @@ function CardDetail({
             {card.name} balance{' '}
             {isPaidOff(card, s) ? <span className="pill">Paid off</span> : s.loan ? <span className="pill idle">{debtLabel(card)}</span> : s.closed && <span className="pill idle">Closed</span>}
           </h2>
-          <button type="button" className="more" onClick={onMenu} aria-label={`Options for ${card.name}`} aria-haspopup="dialog">
-            <Icon name="dots" />
-          </button>
+          {onMenu && (
+            <button type="button" className="more" onClick={onMenu} aria-label={`Options for ${card.name}`} aria-haspopup="dialog">
+              <Icon name="dots" />
+            </button>
+          )}
         </div>
         <p className={`big fit${s.balanceNowCents < 0 ? ' bad-text' : ''}`} style={{ ['--chars' as string]: Math.max(formatCents(s.balanceNowCents).length, 4) }}>
           {formatCents(s.balanceNowCents)}
@@ -383,7 +484,7 @@ function CardDetail({
             )}
           </>
         )}
-        <button type="button" className="primary" onClick={() => onPay()}>
+        <button type="button" className="primary" onClick={() => onPay?.()}>
           Add a payment
         </button>
       </section>
@@ -409,9 +510,13 @@ function CardDetail({
         {s.payoff.kind === 'noPlan' && (
           <>
             <p className="muted">Enter what you plan to pay each month to see a payoff date.</p>
-            <button type="button" className="secondary" onClick={onEdit}>
-              Set a monthly payment
-            </button>
+            {onEdit ? (
+              <button type="button" className="secondary" onClick={onEdit}>
+                Set a monthly payment
+              </button>
+            ) : (
+              <p className="muted small">Set a minimum or planned payment on the Debt tab.</p>
+            )}
           </>
         )}
         {s.payoff.kind === 'never' && (
@@ -520,7 +625,7 @@ function CardDetail({
       <section {...drag('payments', 'card')} aria-labelledby="pm-h">
         <h2 id="pm-h">Payments</h2>
         {payments.length === 0 ? (
-          <p className="empty-line">No payments yet. Mark a linked bill paid on Summary, or add one here.</p>
+          <p className="empty-line">No payments yet. Mark a linked bill paid on Overview, or add one here.</p>
         ) : (
           <ul className="list-edit">
             {payments.slice(0, 8).map((p) => (
@@ -531,7 +636,7 @@ function CardDetail({
                     <span>From the bill {p.billName}</span>
                   </span>
                 ) : (
-                  <button type="button" className="li-main li-tap" onClick={() => onPay(p)} aria-label={`Edit payment on ${dayLabel(p.date)}`}>
+                  <button type="button" className="li-main li-tap" onClick={() => onPay?.(p)} aria-label={`Edit payment on ${dayLabel(p.date)}`}>
                     <b>{dayLabel(p.date)}</b>
                   </button>
                 )}
@@ -881,13 +986,13 @@ function CardSheet({
           <button type="button" role="switch" aria-checked={full} className={`switch-row${full ? ' on' : ''}`} onClick={() => setFull(!full)}>
             <span>
               <b>Paid in full every month</b>
-              <small>No interest. Each month's balance shows as "Credit Card payoff" on Summary.</small>
+              <small>No interest. Each month's balance shows as "Credit Card payoff" on Overview.</small>
             </span>
             <i aria-hidden="true" />
           </button>
         )}
         <p className="muted small">
-          The minimum payment is added to your fixed bills as "{typed || 'name'} payment". Mark that bill paid on Summary (or turn on autopay) and the payment is recorded here.
+          The minimum payment is added to your fixed bills as "{typed || 'name'} payment". Mark that bill paid on Overview (or turn on autopay) and the payment is recorded here.
           {loan
             ? ' Enter what you owed at the start of the tracking month. Interest is charged every month on the ending balance.'
             : ` Purchases tagged with this card under Paid with, dated ${monthLabel(start)} or later, add to the balance. Enter what you owed at the start of that month.`}{' '}

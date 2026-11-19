@@ -6,6 +6,7 @@
  * compared as strings, never through time zones.
  */
 
+import type { CustomChart } from './analytics';
 import type { CreditCard } from './cards';
 
 export type Cents = number;
@@ -27,6 +28,8 @@ export interface Settings {
   paidWith: string[];
   /** False until the first-run setup is finished. */
   setupDone: boolean;
+  /** Charts made on the Analytics tab. */
+  customCharts?: CustomChart[];
 }
 
 /** Autopay on the `day` of each month (1–31; short months use their last day), starting in the month `since`. */

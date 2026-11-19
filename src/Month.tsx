@@ -2,14 +2,14 @@ import { Fragment, useState, type JSX } from 'react';
 import { useCardOrder } from './useCardOrder';
 import { useHoldDrag } from './useHoldDrag';
 import { groupDebtBills, payoffForMonth, PAYOFF_NAME } from './cards';
-import { autopayDate, formatCents, monthLabel, monthSummary, roundDiv, type BillRow, type MonthKey } from './calc';
+import { autopayDate, balances, formatCents, monthLabel, monthSummary, roundDiv, type BillRow, type MonthKey } from './calc';
 import Icon from './icons';
 import { centsToAmountInput, dayLabel, parseCents } from './money';
 import SheetBackdrop from './SheetBackdrop';
 import type { Store } from './store';
 import { useUndo } from './undo';
 import { CatTile, Fig, Meter, MoneyInput, signed } from './ui';
-const MONTH_CARDS = ['left', 'saved', 'categories', 'bills'] as const;
+const MONTH_CARDS = ['left', 'saved', 'balance', 'categories', 'bills'] as const;
 
 /** The month at a glance: budget left, saved against the goal, each category, and the bills checklist. */
 export default function Month({ store, month, today }: { store: Store; month: MonthKey; today: string }) {
@@ -25,6 +25,11 @@ export default function Month({ store, month, today }: { store: Store; month: Mo
   const [yy, mm] = month.split('-').map(Number);
   const daysLeft = new Date(Date.UTC(yy, mm, 0)).getUTCDate() - Number(today.slice(8, 10)) + 1;
   const payoff = payoffForMonth(store.data.cards, store.data.purchases, month);
+  // Checking balance: the starting balance with every started month's income, bills paid and spending applied.
+  const bal = balances(store.data, today);
+  const earlier = [...bal.keys()].filter((m) => m < month).pop();
+  const balanceStart = earlier ? bal.get(earlier)! : store.data.settings.startingBalanceCents;
+  const balanceEnd = s.savedCents === undefined ? balanceStart : balanceStart + s.savedCents;
   const perDay = roundDiv(Math.max(0, s.budgetLeftCents), Math.max(1, daysLeft));
 
   /** What to keep when a bill is unmarked: for an autopay bill, a marker so autopay doesn't record the month again. */
@@ -157,6 +162,32 @@ export default function Month({ store, month, today }: { store: Store; month: Mo
       </section>
 
     ),
+    balance: (
+      <section {...drag('balance', 'card')} aria-labelledby="bal-h">
+        <div className="card-head">
+          <h2 id="bal-h">Checking balance</h2>
+          {s.future && <span className="pill idle">Not started</span>}
+        </div>
+        <p className="big-sm">{formatCents(balanceEnd)}</p>
+        <dl className="kv">
+          <dt>Start of {monthLabel(month)}</dt>
+          <dd>{formatCents(balanceStart)}</dd>
+          {!s.future && (
+            <>
+              <dt>Income</dt>
+              <dd>+{formatCents(s.incomeCents)}</dd>
+              <dt>Bills paid</dt>
+              <dd>−{formatCents(s.billsPaidCents)}</dd>
+              <dt>Spent</dt>
+              <dd>−{formatCents(s.spentCents)}</dd>
+              <dt className="sum-line">{isThisMonth ? 'Now' : 'End of month'}</dt>
+              <dd className="sum-line">{formatCents(balanceEnd)}</dd>
+            </>
+          )}
+        </dl>
+        <p className="muted small">Your starting balance, plus the income, bills paid and spending of every month so far.</p>
+      </section>
+    ),
     categories: (
       <section {...drag('categories', 'card')} aria-labelledby="cat-h">
         <h2 id="cat-h">By category</h2>
@@ -183,22 +214,21 @@ export default function Month({ store, month, today }: { store: Store; month: Mo
                 </li>
               );
             })}
-            {payoff.byCard.length > 0 && (
-              <li className="cat-row payoff-row">
-                <CatTile category={{ name: PAYOFF_NAME, color: 'c8' }} />
-                <div className="cat-name">
-                  <b>{PAYOFF_NAME}</b>
-                  <span>{payoff.byCard.map((c) => c.card.name).join(', ')} · paid in full</span>
-                </div>
-                <div className="cat-left">
-                  {formatCents(payoff.totalCents)}
-                  <small>this month</small>
-                </div>
-              </li>
-            )}
           </ul>
         )}
-        {payoff.byCard.length > 0 && <p className="muted small">The payoff is what your pay-in-full cards charged this month. It is already counted in the categories above, so Spent doesn't count it twice.</p>}
+        {payoff.byCard.length > 0 && (
+          <div className="payoff-block" role="group" aria-label={PAYOFF_NAME}>
+            <CatTile category={{ name: PAYOFF_NAME, color: 'c8' }} />
+            <div className="cat-name">
+              <b>{PAYOFF_NAME}</b>
+              <span>{payoff.byCard.map((c) => c.card.name).join(', ')}</span>
+            </div>
+            <div className="cat-left">
+              {formatCents(payoff.totalCents)}
+              <small>this month</small>
+            </div>
+          </div>
+        )}
       </section>
     ),
     bills: (

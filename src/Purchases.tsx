@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { formatCents, monthLabel, purchasesIn, type MonthKey, type Purchase } from './calc';
+import { formatCents, monthLabel, monthOf, purchasesIn, type MonthKey, type Purchase } from './calc';
 import Icon from './icons';
 import { centsToAmountInput, dayLabel, parseCents } from './money';
 import PurchaseForm from './PurchaseForm';
@@ -9,7 +9,7 @@ import type { Store } from './store';
 import { useUndo } from './undo';
 import { CatTile, MoneyInput } from './ui';
 
-type Sheet = { step: 'menu' | 'confirm' | 'edit'; id: string } | { step: 'filter' } | null;
+type Sheet = { step: 'menu' | 'confirm' | 'edit'; id: string } | { step: 'filter' } | { step: 'add' } | null;
 
 /** The month's purchases grouped by day, with search, filter, and ⋮ for Edit / Delete. */
 export default function Purchases({ store, month, today }: { store: Store; month: MonthKey; today: string }) {
@@ -36,7 +36,12 @@ export default function Purchases({ store, month, today }: { store: Store; month
 
   return (
     <div className="screen">
-      <h1 className="page-title">Purchases</h1>
+      <div className="page-head">
+        <h1 className="page-title">Purchases</h1>
+        <button type="button" className="fab-add" aria-label="Add a purchase" aria-haspopup="dialog" onClick={() => setSheet({ step: 'add' })}>
+          <Icon name="add" />
+        </button>
+      </div>
       <div className="search-bar">
         <Icon name="search" />
         <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${monthLabel(month)}`} aria-label="Search purchases" enterKeyHint="search" />
@@ -73,7 +78,7 @@ export default function Purchases({ store, month, today }: { store: Store; month
 
       {all.length === 0 ? (
         <section className="card empty">
-          <p className="muted">No purchases in {monthLabel(month)} yet. Log one from Add.</p>
+          <p className="muted">No purchases in {monthLabel(month)} yet. Tap + to add one.</p>
         </section>
       ) : shown.length === 0 ? (
         <p className="muted">Nothing matches. Try fewer words or clear the filter.</p>
@@ -157,6 +162,25 @@ export default function Purchases({ store, month, today }: { store: Store; month
                 const before = current;
                 await store.putPurchase(p);
                 offer(`Saved changes to ${describe(p)}`, () => store.putPurchase(before));
+                close();
+              }}
+            />
+          </div>
+        </SheetBackdrop>
+      )}
+      {sheet?.step === 'add' && (
+        <SheetBackdrop onClose={close}>
+          <div className="sheet" role="dialog" aria-modal="true" aria-label="Add a purchase">
+            <h2>Add a purchase</h2>
+            <PurchaseForm
+              store={store}
+              today={today}
+              submitLabel="Save purchase"
+              onCancel={close}
+              onSubmit={async (p) => {
+                await store.putPurchase(p);
+                const cat = data.categories.find((c) => c.id === p.categoryId)?.name ?? 'Purchase';
+                offer(`Saved ${cat} ${formatCents(p.amountCents)} in ${monthLabel(monthOf(p.date))}`, () => store.removePurchase(p.id));
                 close();
               }}
             />

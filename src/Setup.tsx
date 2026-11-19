@@ -386,8 +386,8 @@ function CategoriesCard({ store, today, step }: { store: Store; today: string; s
       </button>
       {cats.length > 1 && (
         <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
-          <span>Show on the Add tab</span>
-          <div className="chips" role="group" aria-label="Categories shown on the Add tab">
+          <span>Show when adding a purchase</span>
+          <div className="chips" role="group" aria-label="Categories offered when adding a purchase">
             {cats.map((c) => {
               const shown = !c.hidden;
               const lastShown = shown && cats.filter((x) => !x.hidden).length === 1;
@@ -409,7 +409,7 @@ function CategoriesCard({ store, today, step }: { store: Store; today: string; s
               );
             })}
           </div>
-          <p className="muted small">A hidden category keeps its budget and still shows on Summary. At least one stays on Add.</p>
+          <p className="muted small">A hidden category keeps its budget and still shows on Overview. At least one stays on the + in Purchases.</p>
         </fieldset>
       )}
       {editing && <CategorySheet store={store} category={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} />}
