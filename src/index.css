@@ -1,24 +1,33 @@
 /*
  * Budget Tracker. Styling follows Trip Tracker (rounded system face, flat white cards, sheets, floating tab bar,
- * meters, category tiles); the theme is its own: cool slate ground, deep navy main color, teal for money that is
- * still on budget. Red always means over. Tokens are recorded in DESIGN.md.
+ * meters, category tiles); the theme is its own, "Fare card": a cobalt shell (top band and tab bar), cool blue-grey
+ * ground, and the headline balance printed on a sunflower card with a magnetic stripe, like a transit pass you spend
+ * down. Red always means over, green under. Tokens are recorded in DESIGN.md.
  */
 :root {
-  --bg: #eef1f5;
+  --bg: #edf0f7;
   --sign: #ffffff;
-  --field: #e6ebf1;
-  --ink: #1e2733;
-  --mute: #536072;
-  --line: #d9e0e8;
-  --or: #1f3a5f; /* main color: navy */
+  --field: #e3e7f2;
+  --ink: #131a35;
+  --mute: #4c5474;
+  --line: #d6dbea;
+  --or: #2440b3; /* main color: cobalt (actions, selection, focus) */
   --on-or: #ffffff;
-  --teal: #0b7480; /* on budget: meter fills, under-goal-met, the active tab icon */
-  --red: #c8331b;
+  --fill: #2440b3; /* meter fills and goal-met bars while on budget */
+  --shell: #1d348f; /* the top band and the tab bar */
+  --on-shell: #ffffff;
+  --gold: #f6c833; /* the fare card: headline balances and the picked tab */
+  --on-gold: #131a35;
+  --s0: #2440b3; /* chart series: income, bills, spending, a fourth */
+  --s1: #6b7499;
+  --s2: #c98a00;
+  --s3: #b83280;
+  --red: #c42d1a;
   --on-red: #ffffff;
-  --good: #136b3c;
+  --good: #13723c;
   --cat-c1: #d9480f;
   --cat-c2: #b83280;
-  --cat-c3: #1f74c7;
+  --cat-c3: #0b84c6;
   --cat-c4: #6b46c1;
   --cat-c5: #0f8a5f;
   --cat-c6: #a16207;
@@ -36,21 +45,29 @@
 /* dark tokens: data-theme is set from the Appearance setting (System follows prefers-color-scheme) */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #11161e;
-  --sign: #1b222d;
-  --field: #27303d;
-  --ink: #e8edf4;
-  --mute: #9fabbb;
-  --line: #303a48;
-  --or: #7ea6e3;
-  --on-or: #0d1726;
-  --teal: #43c7cf;
+  --bg: #0d1124;
+  --sign: #171c35;
+  --field: #232a4a;
+  --ink: #eef0fa;
+  --mute: #a2a9c8;
+  --line: #2a3156;
+  --or: #8fa3ff;
+  --on-or: #0d1124;
+  --fill: #8fa3ff;
+  --shell: #16224f;
+  --on-shell: #ffffff;
+  --gold: #f2c443;
+  --on-gold: #131a35;
+  --s0: #8fa3ff;
+  --s1: #a2a9c8;
+  --s2: #f2c443;
+  --s3: #f06bb4;
   --red: #ff7a5c;
-  --on-red: #11161e;
+  --on-red: #0d1124;
   --good: #5fd39a;
   --cat-c1: #ff8a4c;
   --cat-c2: #f06bb4;
-  --cat-c3: #5aa9f0;
+  --cat-c3: #5ab8f0;
   --cat-c4: #a88bf5;
   --cat-c5: #3ccb8f;
   --cat-c6: #f2c14e;
@@ -577,10 +594,10 @@ html[data-nav] .band-in { animation: none; } /* the whole screen is already slid
 
 /* ---------- Budget Tracker additions ---------- */
 
-/* meters: teal while on budget, red stripes once over */
-.meter { --meter: var(--teal); }
-.tabbar button.on .ic { color: var(--teal); }
-[data-theme="dark"] .tabbar button.on .ic { color: var(--teal); }
+/* meters: the fill color while on budget, red stripes once over */
+.meter { --meter: var(--fill); }
+.tabbar button.on .ic { color: var(--fill); }
+[data-theme="dark"] .tabbar button.on .ic { color: var(--fill); }
 
 /* band: month or year switcher */
 .band-step { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
@@ -650,16 +667,16 @@ html[data-nav] .band-in { animation: none; } /* the whole screen is already slid
 .ychart .grid { stroke: var(--line); stroke-width: 1; }
 .ychart .zero { stroke: color-mix(in srgb, var(--ink) 40%, transparent); stroke-width: 1; }
 .ychart .goal { stroke: var(--mute); stroke-width: 1.5; stroke-dasharray: 5 4; fill: none; }
-.ychart .bar { fill: var(--teal); }
-.ychart .bar.below { fill: color-mix(in srgb, var(--teal) 45%, var(--sign)); }
+.ychart .bar { fill: var(--fill); }
+.ychart .bar.below { fill: color-mix(in srgb, var(--fill) 45%, var(--sign)); }
 .ychart .bar.neg { fill: var(--red); }
 .ychart .line { fill: none; stroke: var(--or); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
 .ychart .dot { fill: var(--sign); stroke: var(--or); stroke-width: 2.5; }
 .ychart text { font-size: 11px; font-weight: 700; fill: var(--mute); font-family: inherit; }
 .chart-key { margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.85rem; color: var(--mute); font-weight: 600; }
 .chart-key span { display: inline-flex; align-items: center; gap: 6px; }
-.chart-key i { width: 12px; height: 12px; border-radius: 4px; background: var(--teal); }
-.chart-key i.k-below { background: color-mix(in srgb, var(--teal) 45%, var(--sign)); }
+.chart-key i { width: 12px; height: 12px; border-radius: 4px; background: var(--fill); }
+.chart-key i.k-below { background: color-mix(in srgb, var(--fill) 45%, var(--sign)); }
 .chart-key i.k-neg { background: var(--red); }
 .chart-key i.k-goal { height: 2px; border-radius: 0; background: repeating-linear-gradient(90deg, var(--mute) 0 4px, transparent 4px 7px); }
 .table-wrap { overflow-x: auto; margin: 6px -18px -6px; padding: 0 18px 6px; scrollbar-width: thin; }
@@ -768,7 +785,7 @@ html[data-nav] .band-in { animation: none; } /* the whole screen is already slid
 .switch-row small { color: var(--mute); font-weight: 600; font-size: 0.8rem; }
 .switch-row i { flex: none; position: relative; width: 48px; height: 28px; border-radius: 999px; background: var(--field); transition: background-color 160ms ease-out; }
 .switch-row i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--sign); box-shadow: 0 1px 3px rgb(0 0 0 / 0.3); transition: transform 160ms var(--spring); }
-.switch-row.on i { background: var(--teal); }
+.switch-row.on i { background: var(--fill); }
 .switch-row.on i::after { transform: translateX(20px); }
 .switch-row:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 /* a tall sheet scrolls; its parts keep their height instead of squeezing */
@@ -802,17 +819,17 @@ html[data-nav] .band-in { animation: none; } /* the whole screen is already slid
 .payoff-block .cat-left small { display: block; font-size: 0.75rem; color: var(--mute); font-weight: 700; }
 
 /* Analytics charts */
-.ychart .bar.s0 { fill: var(--teal); }
-.ychart .bar.s1 { fill: var(--or); }
-.ychart .bar.s2 { fill: var(--cat-c4); }
-.ychart .bar.s3 { fill: var(--cat-c6); }
-.ychart g.s0 .line { stroke: var(--teal); } .ychart g.s0 .dot { stroke: var(--teal); }
-.ychart g.s1 .line { stroke: var(--or); } .ychart g.s1 .dot { stroke: var(--or); }
-.ychart g.s2 .line { stroke: var(--cat-c4); } .ychart g.s2 .dot { stroke: var(--cat-c4); }
-.ychart g.s3 .line { stroke: var(--cat-c6); } .ychart g.s3 .dot { stroke: var(--cat-c6); }
+.ychart .bar.s0 { fill: var(--s0); }
+.ychart .bar.s1 { fill: var(--s1); }
+.ychart .bar.s2 { fill: var(--s2); }
+.ychart .bar.s3 { fill: var(--s3); }
+.ychart g.s0 .line { stroke: var(--s0); } .ychart g.s0 .dot { stroke: var(--s0); }
+.ychart g.s1 .line { stroke: var(--s1); } .ychart g.s1 .dot { stroke: var(--s1); }
+.ychart g.s2 .line { stroke: var(--s2); } .ychart g.s2 .dot { stroke: var(--s2); }
+.ychart g.s3 .line { stroke: var(--s3); } .ychart g.s3 .dot { stroke: var(--s3); }
 .chart-key i.k { width: 12px; height: 12px; border-radius: 4px; }
-.chart-key i.s0 { background: var(--teal); } .chart-key i.s1 { background: var(--or); }
-.chart-key i.s2 { background: var(--cat-c4); } .chart-key i.s3 { background: var(--cat-c6); }
+.chart-key i.s0 { background: var(--s0); } .chart-key i.s1 { background: var(--s1); }
+.chart-key i.s2 { background: var(--s2); } .chart-key i.s3 { background: var(--s3); }
 .chart-key i.k-ref { height: 2px; border-radius: 0; background: repeating-linear-gradient(90deg, var(--mute) 0 4px, transparent 4px 7px); }
 .ychart .bar.cat-c1 { fill: var(--cat-c1); }
 .chart-key i.cat-c1 { background: var(--cat-c1); }
@@ -875,3 +892,33 @@ html[data-nav] .band-in { animation: none; } /* the whole screen is already slid
 .card-head:has(> .more) { flex-wrap: nowrap; align-items: flex-start; }
 .card-head:has(> .more) > h2 { min-width: 0; flex: 1; }
 .card-head:has(> .more) > .more { flex: none; }
+
+/* ---------- Fare card theme: the cobalt shell and the sunflower pass ---------- */
+/* the band is the top of the shell: cobalt edge to edge, under the status bar too */
+.band { background: var(--shell); color: var(--on-shell); }
+.band .band-title, .band .band-pick, .band .band-sub { color: var(--on-shell); }
+.band .band-sub { opacity: 0.8; }
+.band .band-pick .band-title svg { color: var(--on-shell); opacity: 0.8; }
+.band .hit { background: color-mix(in srgb, var(--on-shell) 14%, transparent); color: var(--on-shell); }
+.band .band-pick:active { background: color-mix(in srgb, var(--on-shell) 12%, transparent); }
+.band :focus-visible { outline-color: var(--gold); }
+main { padding-top: 14px; }
+/* the first-run screen has no band, so the status bar gets a cobalt strip of its own */
+.app.first { border-top: env(safe-area-inset-top) solid var(--shell); }
+/* tab bar: cobalt, the picked tab punched out in sunflower */
+.tabbar { background: var(--shell); border-color: var(--shell); }
+.tabbar button { color: color-mix(in srgb, var(--on-shell) 74%, transparent); }
+.tabbar button.on { background: var(--gold); color: var(--on-gold); }
+.tabbar button.on .ic, [data-theme="dark"] .tabbar button.on .ic { color: var(--on-gold); }
+.tabbar :focus-visible { outline-color: var(--gold); }
+[data-theme="dark"] .tabbar { box-shadow: var(--float), inset 0 0 0 1px color-mix(in srgb, var(--on-shell) 10%, transparent); }
+/* the headline balance on each screen is printed on the pass: sunflower, with a magnetic stripe across the top */
+.hero { position: relative; overflow: hidden; padding-top: 38px; }
+.hero::before { content: ''; position: absolute; left: 0; right: 0; top: 14px; height: 12px; background: #131a35; opacity: 0.9; pointer-events: none; } /* the magnetic stripe: always the card ink, on the pass and on the red over-budget card */
+.hero:not(.over) { background: var(--gold); color: var(--on-gold); box-shadow: none; }
+.hero:not(.over) h2, .hero:not(.over) b, .hero:not(.over) .big { color: var(--on-gold); }
+.hero:not(.over) .muted, .hero:not(.over) .rule span, .hero:not(.over) .stat-grid span, .hero:not(.over) .tiles span { color: color-mix(in srgb, var(--on-gold) 80%, var(--gold)); }
+.hero:not(.over) .meter { background: color-mix(in srgb, var(--on-gold) 16%, var(--gold)); }
+.hero:not(.over) .meter i { background: var(--on-gold); }
+.hero:not(.over) .pill { background: color-mix(in srgb, var(--on-gold) 12%, var(--gold)); color: var(--on-gold); }
+.hero:not(.over) .fig-pos { color: var(--on-gold); }

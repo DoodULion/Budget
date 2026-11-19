@@ -22,7 +22,7 @@ for (const [name, size, scale] of sizes) {
   await page.setViewportSize({ width: size, height: size });
   const inner = Math.round(size * scale);
   await page.setContent(
-    `<body style="margin:0;background:#1f3a5f;display:grid;place-items:center;width:${size}px;height:${size}px">` +
+    `<body style="margin:0;background:#1d348f;display:grid;place-items:center;width:${size}px;height:${size}px">` +
       `<div style="width:${inner}px;height:${inner}px">${svg.replace('<svg ', `<svg width="${inner}" height="${inner}" `)}</div></body>`,
   );
   await page.screenshot({ path: new URL(name, out).pathname, omitBackground: false });
