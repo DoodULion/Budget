@@ -402,6 +402,39 @@ export function groupDebtBills(rows: BillRow[], debts: CreditCard[]): BillItem[]
   return items;
 }
 
+export type BillSort = 'setup' | 'name' | 'amount' | 'status';
+export const BILL_SORTS: { id: BillSort; label: string }[] = [
+  { id: 'setup', label: 'Setup order' },
+  { id: 'name', label: 'Name (A to Z)' },
+  { id: 'amount', label: 'Amount (largest first)' },
+  { id: 'status', label: 'Unpaid first' },
+];
+
+const rank = (r: BillRow) => (r.status === 'unpaid' ? 0 : r.status === 'paid' ? 1 : 2);
+const shown = (r: BillRow) => (r.status === 'paid' ? r.countedCents : r.status === 'ended' ? 0 : r.bill.amountCents);
+
+/**
+ * The month's bill rows and groups in the chosen order. A group sorts by its label, its total, or (unpaid first)
+ * whether any of its bills is unpaid, and its bills are sorted the same way inside. Ties keep the setup order.
+ */
+export function sortBillItems(items: BillItem[], by: BillSort): BillItem[] {
+  if (by === 'setup') return items;
+  const cmpRows = (a: BillRow, b: BillRow) => {
+    if (by === 'name') return a.bill.name.localeCompare(b.bill.name, undefined, { sensitivity: 'base' });
+    if (by === 'amount') return shown(b) - shown(a);
+    return rank(a) - rank(b);
+  };
+  const groupRank = (g: Extract<BillItem, { kind: 'group' }>) => Math.min(...g.rows.map(rank));
+  const cmp = (a: BillItem, b: BillItem) => {
+    if (a.kind === 'bill' && b.kind === 'bill') return cmpRows(a.row, b.row);
+    if (by === 'name') return (a.kind === 'bill' ? a.row.bill.name : a.label).localeCompare(b.kind === 'bill' ? b.row.bill.name : b.label, undefined, { sensitivity: 'base' });
+    if (by === 'amount') return (b.kind === 'bill' ? shown(b.row) : b.amountCents) - (a.kind === 'bill' ? shown(a.row) : a.amountCents);
+    return (a.kind === 'bill' ? rank(a.row) : groupRank(a)) - (b.kind === 'bill' ? rank(b.row) : groupRank(b));
+  };
+  const inner = items.map((it) => (it.kind === 'group' ? { ...it, rows: [...it.rows].sort(cmpRows) } : it));
+  return inner.map((it, i) => ({ it, i })).sort((a, b) => cmp(a.it, b.it) || a.i - b.i).map((x) => x.it);
+}
+
 /** The id of the fixed bill that carries a debt's minimum payment. */
 export const debtBillId = (debtId: string) => `debt:${debtId}`;
 export const isDebtBill = (b: Pick<Bill, 'id'>) => b.id.startsWith('debt:');

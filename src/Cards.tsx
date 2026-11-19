@@ -6,7 +6,7 @@ import { centsToAmountInput, dayLabel, newId, ordinal, parseCents } from './mone
 import SheetBackdrop from './SheetBackdrop';
 import type { Store } from './store';
 import { useUndo } from './undo';
-import { useCardOrder } from './useCardOrder';
+import { mergeOrder, useCardOrder } from './useCardOrder';
 import { useHoldDrag } from './useHoldDrag';
 import { CatTile, Fig, Meter, MoneyInput } from './ui';
 
@@ -19,6 +19,20 @@ function compact(cents: number): string {
 const SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const shortMonth = (m: MonthKey) => SHORT[Number(m.slice(5, 7)) - 1];
 const colorOf = (i: number) => `c${(i % 8) + 1}`;
+
+/** The order the debts are shown in: rearranged by hold-and-drag, kept on this device (not in backups). New debts go last. */
+function useDebtOrder(cards: CreditCard[]) {
+  const ids = cards.map((c) => c.id);
+  const [saved, setSaved] = useCardOrder('debt-order', ids);
+  return [mergeOrder(saved, ids), setSaved] as const;
+}
+
+/** Summaries in the saved order, and a color for each debt that stays with it when the order changes. */
+function arrange(cards: CreditCard[], summaries: CardSummary[], order: string[]) {
+  const sorted = order.map((id) => summaries.find((s) => s.card.id === id)).filter((s): s is CardSummary => !!s);
+  const colorFor = (id: string) => colorOf(Math.max(0, cards.findIndex((c) => c.id === id)));
+  return { sorted, colorFor };
+}
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 /** Debt: credit cards (balances follow the purchases tagged with the card) and loans, with interest, minimum payments and insights. */
@@ -29,7 +43,12 @@ export default function Cards({ store, today }: { store: Store; today: string })
   const [paying, setPaying] = useState<{ card: CreditCard; payment?: CardPayment } | null>(null);
   const [menu, setMenu] = useState<CreditCard | null>(null);
   const [payingOff, setPayingOff] = useState<CardSummary | null>(null);
-  const summaries = cards.map((c) => cardSummary(c, purchases, today, linkedBills(c, store.data, today)));
+  const [debtOrder, setDebtOrder] = useDebtOrder(cards);
+  const { sorted: summaries, colorFor } = arrange(
+    cards,
+    cards.map((c) => cardSummary(c, purchases, today, linkedBills(c, store.data, today))),
+    debtOrder,
+  );
   const one = summaries.length === 1 ? summaries[0] : summaries.find((s) => s.card.id === sel);
 
   return (
@@ -53,9 +72,9 @@ export default function Cards({ store, today }: { store: Store; today: string })
               <button type="button" className={one ? '' : 'on'} aria-pressed={!one} onClick={() => setSel('all')}>
                 All debts
               </button>
-              {summaries.map((s, i) => (
+              {summaries.map((s) => (
                 <button key={s.card.id} type="button" className={one?.card.id === s.card.id ? 'on' : ''} aria-pressed={one?.card.id === s.card.id} onClick={() => setSel(s.card.id)}>
-                  <CatTile category={{ name: s.card.name, color: colorOf(i) }} small />
+                  <CatTile category={{ name: s.card.name, color: colorFor(s.card.id) }} small />
                   {s.card.name}
                 </button>
               ))}
@@ -64,7 +83,7 @@ export default function Cards({ store, today }: { store: Store; today: string })
           {one ? (
             <CardDetail key={one.card.id} mode="manage" s={one} categories={categories} today={today} onEdit={() => setEditing(one.card)} onMenu={() => setMenu(one.card)} onPay={(payment) => setPaying({ card: one.card, payment })} />
           ) : (
-            <DebtList summaries={summaries} today={today} onOpen={(id) => setSel(id)} />
+            <DebtList summaries={summaries} colorFor={colorFor} onReorder={setDebtOrder} onOpen={(id) => setSel(id)} onMenu={setMenu} />
           )}
           <button type="button" className="add-row" onClick={() => setEditing('new')}>
             <Icon name="add" />
@@ -111,9 +130,9 @@ export default function Cards({ store, today }: { store: Store; today: string })
 
 /* ---------- drag-to-rearrange plumbing shared by the two views ---------- */
 
-function useArrange(screen: string, ids: readonly string[]) {
+function useArrange(screen: string, ids: readonly string[], ignore?: string) {
   const [saved, setSaved] = useCardOrder(screen, ids);
-  const { order, dragId, listRef, bind, justDragged } = useHoldDrag(saved, setSaved, ':scope > [data-id]');
+  const { order, dragId, listRef, bind, justDragged } = useHoldDrag(saved, setSaved, ':scope > [data-id]', ignore);
   const drag = (id: string, cls: string) => ({ ...bind(id), className: `${cls} sum-card${dragId === id ? ' lifted' : ''}` });
   const grid = (cards: Record<string, JSX.Element>) => (
     <div
@@ -138,7 +157,7 @@ function useArrange(screen: string, ids: readonly string[]) {
 
 const OVERVIEW = ['total', 'list', 'chart', 'interest', 'order'] as const;
 
-function Overview({ summaries, today, onOpen }: { summaries: CardSummary[]; today: string; onOpen: (id: string) => void }) {
+function Overview({ summaries, colorFor, today, onOpen }: { summaries: CardSummary[]; colorFor: (id: string) => string; today: string; onOpen: (id: string) => void }) {
   const { drag, grid } = useArrange('cards-all', OVERVIEW);
   const sum = (f: (s: CardSummary) => number) => summaries.reduce((t, s) => t + f(s), 0);
   const owed = sum((s) => Math.max(0, s.balanceNowCents));
@@ -178,9 +197,9 @@ function Overview({ summaries, today, onOpen }: { summaries: CardSummary[]; toda
       <section {...drag('list', 'card')} aria-labelledby="list-h">
         <h2 id="list-h">Your debts</h2>
         <ul className="cat-rows">
-          {summaries.map((s, i) => (
+          {summaries.map((s) => (
             <li key={s.card.id} className="cat-row">
-              <CatTile category={{ name: s.card.name, color: colorOf(i) }} />
+              <CatTile category={{ name: s.card.name, color: colorFor(s.card.id) }} />
               <button type="button" className="cat-name card-open" onClick={() => onOpen(s.card.id)} aria-label={`Open ${s.card.name}`}>
                 <b>{s.card.name}</b>
                 <span>
@@ -241,8 +260,14 @@ function Overview({ summaries, today, onOpen }: { summaries: CardSummary[]; toda
 }
 
 /** The Debt tab's list: what is owed on each debt with its minimum payment and interest rate. */
-function DebtList({ summaries, today, onOpen }: { summaries: CardSummary[]; today: string; onOpen: (id: string) => void }) {
-  const { drag, grid } = useArrange('debt-list', ['total', 'list']);
+function DebtList({ summaries, colorFor, onReorder, onOpen, onMenu }: { summaries: CardSummary[]; colorFor: (id: string) => string; onReorder: (ids: string[]) => void; onOpen: (id: string) => void; onMenu: (card: CreditCard) => void }) {
+  // The cards rearrange by hold-and-drag, and so do the debts inside the list (a press on a debt belongs to the debt).
+  const { drag, grid } = useArrange('debt-list', ['total', 'list'], '.more, .debt-row');
+  const rows = useHoldDrag(
+    summaries.map((s) => s.card.id),
+    onReorder,
+    ':scope > [data-id]',
+  );
   const live = summaries.filter((s) => !isPaidOff(s.card, s));
   const owed = summaries.reduce((t, s) => t + Math.max(0, s.balanceNowCents), 0);
   const minimums = live.reduce((t, s) => t + (s.card.minPaymentCents ?? 0), 0);
@@ -273,10 +298,21 @@ function DebtList({ summaries, today, onOpen }: { summaries: CardSummary[]; toda
     list: (
       <section {...drag('list', 'card')} aria-labelledby="list-h">
         <h2 id="list-h">Your debts</h2>
-        <ul className="debt-list">
-          {summaries.map((s, i) => (
-            <li key={s.card.id} className="debt-row">
-              <CatTile category={{ name: s.card.name, color: colorOf(i) }} />
+        <ul
+          className={`debt-list${rows.dragId ? ' dragging' : ''}`}
+          ref={(el) => {
+            rows.listRef.current = el;
+          }}
+          onClickCapture={(e) => {
+            if (rows.justDragged()) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }}
+        >
+          {rows.order.map((id) => summaries.find((x) => x.card.id === id)).filter((s): s is CardSummary => !!s).map((s) => (
+            <li key={s.card.id} {...rows.bind(s.card.id)} className={`debt-row sum-card${rows.dragId === s.card.id ? ' lifted' : ''}`}>
+              <CatTile category={{ name: s.card.name, color: colorFor(s.card.id) }} />
               <button type="button" className="main" onClick={() => onOpen(s.card.id)} aria-label={`Open ${s.card.name}`}>
                 <span className="dn">{s.card.name}</span>
                 <span className="db">{formatCents(s.balanceNowCents)}</span>
@@ -291,13 +327,15 @@ function DebtList({ summaries, today, onOpen }: { summaries: CardSummary[]; toda
                     .join(' · ')}
                 </span>
               </button>
+              <button type="button" className="more" onClick={() => onMenu(s.card)} aria-label={`Options for ${s.card.name}`} aria-haspopup="dialog">
+                <Icon name="dots" />
+              </button>
             </li>
           ))}
         </ul>
       </section>
     ),
   };
-  void today;
   return grid(cards);
 }
 
@@ -305,7 +343,12 @@ function DebtList({ summaries, today, onOpen }: { summaries: CardSummary[]; toda
 export function DebtAnalytics({ store, today }: { store: Store; today: string }) {
   const { cards, purchases, categories } = store.data;
   const [sel, setSel] = useState('all');
-  const summaries = cards.map((c) => cardSummary(c, purchases, today, linkedBills(c, store.data, today)));
+  const [debtOrder] = useDebtOrder(cards);
+  const { sorted: summaries, colorFor } = arrange(
+    cards,
+    cards.map((c) => cardSummary(c, purchases, today, linkedBills(c, store.data, today))),
+    debtOrder,
+  );
   const one = summaries.length === 1 ? summaries[0] : summaries.find((s) => s.card.id === sel);
   if (summaries.length === 0) {
     return (
@@ -322,15 +365,15 @@ export function DebtAnalytics({ store, today }: { store: Store; today: string })
           <button type="button" className={one ? '' : 'on'} aria-pressed={!one} onClick={() => setSel('all')}>
             All debts
           </button>
-          {summaries.map((s, i) => (
+          {summaries.map((s) => (
             <button key={s.card.id} type="button" className={one?.card.id === s.card.id ? 'on' : ''} aria-pressed={one?.card.id === s.card.id} onClick={() => setSel(s.card.id)}>
-              <CatTile category={{ name: s.card.name, color: colorOf(i) }} small />
+              <CatTile category={{ name: s.card.name, color: colorFor(s.card.id) }} small />
               {s.card.name}
             </button>
           ))}
         </div>
       )}
-      {one ? <CardDetail key={one.card.id} mode="insights" s={one} categories={categories} today={today} /> : <Overview summaries={summaries} today={today} onOpen={(id) => setSel(id)} />}
+      {one ? <CardDetail key={one.card.id} mode="insights" s={one} categories={categories} today={today} /> : <Overview summaries={summaries} colorFor={colorFor} today={today} onOpen={(id) => setSel(id)} />}
     </>
   );
 }
@@ -601,12 +644,12 @@ function CardDetail({
         {s.byCategory.length === 0 ? (
           <p className="empty-line">Purchases paid with {card.name} will show here.</p>
         ) : (
-          <ul className="hbars">
+          <ul className="hbars stack">
             {s.byCategory.map((c) => {
               const cat = categories.find((x) => x.id === c.categoryId);
               return (
                 <li key={c.categoryId}>
-                  <span className="hb-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <span className="hb-label">
                     <CatTile category={cat} small />
                     {cat?.name ?? '(deleted)'}
                   </span>

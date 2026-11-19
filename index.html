@@ -16,7 +16,7 @@
         // Light unless the owner chose Dark, or chose System and the phone is in dark mode.
         var dark = c === 'dark' || (c === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
         document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-        document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#141922' : '#eef1f5');
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#11161e' : '#eef1f5');
       })();
     </script>
     <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48.png" />

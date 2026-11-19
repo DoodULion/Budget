@@ -6,7 +6,7 @@
 export type ThemeChoice = 'system' | 'light' | 'dark';
 
 const KEY = 'budget-tracker-theme';
-const COLORS = { light: '#eef1f5', dark: '#141922' };
+const COLORS = { light: '#eef1f5', dark: '#11161e' };
 const media = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)') : undefined;
 
 export function getThemeChoice(): ThemeChoice {

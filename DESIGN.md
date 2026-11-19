@@ -14,7 +14,7 @@ Restrained: cool slate neutrals, one navy main color for actions and selection, 
 | `--ink` | `#1e2733` | `#e8edf4` | Text |
 | `--mute` | `#536072` | `#9fabbb` | Secondary text (≥4.5:1 on cards) |
 | `--line` | `#d9e0e8` | `#303a48` | Hairlines, field borders |
-| `--or` (main) | `#1f3a5f` navy | `#a9c4ea` | Primary buttons, picked chips, paid checkboxes, tab bar outline, focus |
+| `--or` (main) | `#1f3a5f` navy | `#7ea6e3` | Primary buttons, picked chips, paid checkboxes, tab bar outline, focus |
 | `--teal` | `#0b7480` | `#43c7cf` | Meter fills on budget, active tab icon, goal-met bars |
 | `--red` | `#c8331b` | `#ff7a5c` | Over budget, lost money, destructive actions |
 | `--good` | `#136b3c` | `#5fd39a` | Positive vs goal, Goal met pill |
@@ -36,12 +36,13 @@ Radii: hero 28px, card 22px, row 16px, control 14px, pills 999px. Cards are flat
 
 ## Components
 
-- **Band**: month or year stepper (‹ title ›) with "This month" or "Back to this month".
+- **Band**: on Overview and Purchases, a month or year stepper (‹ title ›) with "This month"; on Analytics, Debt and Setup, which don't follow the period, the tab's name in the same place. The visible page title below the band is only on Purchases (with its + button).
 - **Hero card**: Budget left with meter and three figures; turns solid red when over.
-- **Meter**: 12px track, teal fill, red stripes when over.
+- **Meter**: 12px track (a faint navy tint, so the empty part never reads as a second value), teal fill, red stripes when over.
 - **Bills checklist**: 30px checkbox (navy when paid, dashed when ended), name, status line, amount, ⋮ for date and amount paid.
 - **Category row**: tile, name with "spent of budget", left or over, slim meter.
-- **Chips**: category tiles and payment methods; picked chip is navy.
+- **Chips**: category tiles, payment methods and periods; picked chip is navy.
+- **Segmented control** (`.seg`): a tinted track with a raised card-colored pill for the choice. Used for switching views or sections (Analytics sections, Month / Year, Appearance), never for picking data, so it stays distinct from chips.
 - **Sheets**: rise from the bottom; end in "Save changes" / "Discard changes"; destructive steps confirm.
 - **Undo toast**: ink panel above the tab bar for about 7 seconds.
 - **Year charts**: plain SVG. Saved per month as bars against a dashed goal line (teal met, pale teal under, red lost); balance as a navy line with dots; category totals as bars in category colors. Each chart has a text alternative.

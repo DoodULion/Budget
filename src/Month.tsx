@@ -1,7 +1,7 @@
 import { Fragment, useState, type JSX } from 'react';
 import { useCardOrder } from './useCardOrder';
 import { useHoldDrag } from './useHoldDrag';
-import { groupDebtBills, payoffForMonth, PAYOFF_NAME } from './cards';
+import { BILL_SORTS, groupDebtBills, sortBillItems, payoffForMonth, PAYOFF_NAME, type BillSort } from './cards';
 import { autopayDate, balances, formatCents, monthLabel, monthSummary, roundDiv, type BillRow, type MonthKey } from './calc';
 import Icon from './icons';
 import { centsToAmountInput, dayLabel, parseCents } from './money';
@@ -17,6 +17,24 @@ export default function Month({ store, month, today }: { store: Store; month: Mo
   const [incomeOpen, setIncomeOpen] = useState(false);
   const [billSheet, setBillSheet] = useState<BillRow | null>(null);
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  const [sortOpen, setSortOpen] = useState(false);
+  // How the bills are ordered is a per-device preference (like the card order), not budget data.
+  const [billSort, setBillSortState] = useState<BillSort>(() => {
+    try {
+      const v = localStorage.getItem('budget-tracker-bill-sort');
+      return BILL_SORTS.some((s) => s.id === v) ? (v as BillSort) : 'setup';
+    } catch {
+      return 'setup';
+    }
+  });
+  const setBillSort = (v: BillSort) => {
+    setBillSortState(v);
+    try {
+      localStorage.setItem('budget-tracker-bill-sort', v);
+    } catch {
+      /* storage unavailable: the choice lasts until the app closes */
+    }
+  };
   const { offer } = useUndo();
   const over = s.spentCents > s.spendingBudgetCents;
   const isThisMonth = month === today.slice(0, 7);
@@ -239,11 +257,17 @@ export default function Month({ store, month, today }: { store: Store; month: Mo
             <span className={`pill${s.unpaidCount ? ' idle' : ''}`}>{s.unpaidCount ? `${s.unpaidCount} unpaid` : 'All paid'}</span>
           )}
         </div>
+        {s.bills.length > 1 && (
+          <button type="button" className="sort-btn" aria-haspopup="dialog" onClick={() => setSortOpen(true)}>
+            Sort: {BILL_SORTS.find((x) => x.id === billSort)?.label}
+            <Icon name="down" />
+          </button>
+        )}
         {s.bills.length === 0 ? (
           <p className="empty-line">Add your fixed bills under Setup.</p>
         ) : (
           <ul className="bills">
-            {groupDebtBills(s.bills, store.data.cards).map((it) => {
+            {sortBillItems(groupDebtBills(s.bills, store.data.cards), billSort).map((it) => {
               if (it.kind === 'bill') return renderBill(it.row);
               const open = openGroups.has(it.id);
               const live = it.rows.filter((r) => r.status !== 'ended').length;
@@ -294,6 +318,33 @@ export default function Month({ store, month, today }: { store: Store; month: Mo
       </div>
 
       {incomeOpen && <IncomeSheet store={store} month={month} onClose={() => setIncomeOpen(false)} />}
+      {sortOpen && (
+        <SheetBackdrop onClose={() => setSortOpen(false)}>
+          <div className="sheet menu" role="dialog" aria-modal="true" aria-label="Sort bills">
+            <h2>Sort bills</h2>
+            <div className="chips" role="radiogroup" aria-label="Sort bills by">
+              {BILL_SORTS.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={billSort === o.id}
+                  className={billSort === o.id ? 'on' : ''}
+                  onClick={() => {
+                    setBillSort(o.id);
+                    setSortOpen(false);
+                  }}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="secondary" onClick={() => setSortOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </SheetBackdrop>
+      )}
       {billSheet && <BillSheet store={store} month={month} row={billSheet} today={today} onClose={() => setBillSheet(null)} />}
     </div>
   );

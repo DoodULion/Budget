@@ -117,12 +117,8 @@ function Main({ store, today }: { store: Store; today: string }) {
       />
     );
   } else {
-    band = (
-      <p className="band-title center">
-        {monthLabel(current)}
-        <span className="band-sub">This month</span>
-      </p>
-    );
+    // Analytics, Debt and Setup don't follow the period, so their band names the tab instead of a month.
+    band = <p className="band-title center band-name">{TABS.find((t) => t.id === tab)!.label}</p>;
   }
 
   return (

@@ -38,7 +38,7 @@ export default function Setup({ store, today, firstRun, onStart }: { store: Stor
           <p>Enter your own numbers. They stay on this phone and never leave it. You can change any of this later under Setup.</p>
         </header>
       ) : (
-        <h1 className="page-title">Setup</h1>
+        <h1>Setup</h1>
       )}
       <div className="setup-grid">
         <PlanCard store={store} today={today} step={firstRun ? 1 : undefined} />

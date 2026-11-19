@@ -52,7 +52,7 @@ export default function Analytics({ store, today }: { store: Store; today: strin
 
   return (
     <div className="screen">
-      <h1 className="page-title">Analytics</h1>
+      <h1>Analytics</h1>
       <div className="seg" role="group" aria-label="Analytics section">
         {SECTIONS.map((s) => (
           <button key={s.id} type="button" className={section === s.id ? 'on' : ''} aria-pressed={section === s.id} onClick={() => setSection(s.id)}>
