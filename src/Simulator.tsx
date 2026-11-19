@@ -4,6 +4,7 @@
  * per-device scratchpad (localStorage), not budget data and not in backups.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { haptic } from './haptics';
 import { addMonths, formatCents, monthLabel, type Cents, type MonthKey } from './calc';
 import { Columns, Lines, monthTick, type Series } from './charts';
 import Icon from './icons';
@@ -37,16 +38,50 @@ const HORIZONS = [
   { months: 60, label: '5 years' },
 ];
 
+/** A named set of changes. Every change in it stacks on the others. */
+interface Plan {
+  id: string;
+  name: string;
+  changes: Change[];
+  /** Ids of changes that are switched off: kept in the list but left out of the results. */
+  off: string[];
+}
+
 interface SimState {
   horizon: number;
   basis: 'budget' | 'recent';
-  changes: Change[];
+  plans: Plan[];
+  activeId: string;
   goalText: string;
   rateText: string;
   byMonth: MonthKey | '';
 }
 
-const DEFAULTS: SimState = { horizon: 12, basis: 'budget', changes: [], goalText: '', rateText: '', byMonth: '' };
+const DEFAULTS: SimState = { horizon: 12, basis: 'budget', plans: [{ id: 'a', name: 'Plan A', changes: [], off: [] }], activeId: 'a', goalText: '', rateText: '', byMonth: '' };
+
+const isChange = (c: unknown) => !!c && typeof c === 'object' && typeof (c as Change).kind === 'string';
+const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
+
+/** Saved plans; a scratchpad from before plans existed becomes Plan A. */
+function loadPlans(raw: Record<string, unknown>): Pick<SimState, 'plans' | 'activeId'> {
+  const plans: Plan[] = Array.isArray(raw.plans)
+    ? raw.plans
+        .filter((p: unknown) => !!p && typeof p === 'object' && typeof (p as Plan).id === 'string')
+        .map((p: Plan) => ({ id: p.id, name: typeof p.name === 'string' && p.name.trim() ? p.name : 'Plan', changes: Array.isArray(p.changes) ? p.changes.filter(isChange) : [], off: strings(p.off) }))
+    : [{ id: 'a', name: 'Plan A', changes: Array.isArray(raw.changes) ? raw.changes.filter(isChange) : [], off: strings(raw.off) }];
+  if (plans.length === 0) plans.push({ id: 'a', name: 'Plan A', changes: [], off: [] });
+  const activeId = plans.some((p) => p.id === raw.activeId) ? (raw.activeId as string) : plans[0].id;
+  return { plans, activeId };
+}
+
+/** The next free "Plan B", "Plan C"… name. */
+function nextPlanName(plans: Plan[]): string {
+  for (let i = 0; i < 26; i++) {
+    const name = `Plan ${String.fromCharCode(65 + i)}`;
+    if (!plans.some((p) => p.name === name)) return name;
+  }
+  return `Plan ${plans.length + 1}`;
+}
 
 function load(): SimState {
   try {
@@ -55,7 +90,7 @@ function load(): SimState {
     return {
       horizon: HORIZONS.some((h) => h.months === raw.horizon) ? raw.horizon : DEFAULTS.horizon,
       basis: raw.basis === 'recent' ? 'recent' : 'budget',
-      changes: Array.isArray(raw.changes) ? raw.changes.filter((c: unknown) => !!c && typeof c === 'object' && typeof (c as Change).kind === 'string') : [],
+      ...loadPlans(raw),
       goalText: typeof raw.goalText === 'string' ? raw.goalText : '',
       rateText: typeof raw.rateText === 'string' ? raw.rateText : '',
       byMonth: typeof raw.byMonth === 'string' ? raw.byMonth : '',
@@ -95,7 +130,12 @@ export default function Simulator({ store, today }: { store: Store; today: strin
   const debts = useMemo(() => simDebts(data, today), [data, today]);
   const bills = data.bills.filter((b) => !b.deleted);
   // Changes that name a debt or bill that is gone are left out.
-  const changes = st.changes.filter((c) => (c.kind === 'payoff' || c.kind === 'extra' ? debts.some((d) => d.id === c.debtId) : c.kind === 'bill' ? bills.some((b) => b.id === c.billId) : true));
+  const plan = st.plans.find((p) => p.id === st.activeId) ?? st.plans[0];
+  const valid = (list: Change[]) => list.filter((c) => (c.kind === 'payoff' || c.kind === 'extra' ? debts.some((d) => d.id === c.debtId) : c.kind === 'bill' ? bills.some((b) => b.id === c.billId) : true));
+  const counted = (p: Plan) => valid(p.changes).filter((c) => !p.off.includes(c.id));
+  const listed = valid(plan.changes);
+  // Every change in the list stacks on the others; a switched-off one stays listed but doesn't count.
+  const changes = counted(plan);
   const spendingCents = st.basis === 'recent' ? recentSpendingCents(data, today) : budgetSpendingCents(data);
   const input = { data, today, horizon: st.horizon, spendingCents };
   const base = useMemo(() => project(input), [data, today, st.horizon, spendingCents]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -107,22 +147,42 @@ export default function Simulator({ store, today }: { store: Store; today: strin
   const goalCents = parseCents(st.goalText);
 
   const set = (patch: Partial<SimState>) => setSt((s) => ({ ...s, ...patch }));
+  const setPlan = (id: string, patch: Partial<Plan>) => setSt((s) => ({ ...s, plans: s.plans.map((p) => (p.id === id ? { ...p, ...patch } : p)) }));
+  const [planSheet, setPlanSheet] = useState(false);
   function saveChange(c: Change) {
-    set({ changes: st.changes.some((x) => x.id === c.id) ? st.changes.map((x) => (x.id === c.id ? c : x)) : [...st.changes, c] });
+    setPlan(plan.id, { changes: plan.changes.some((x) => x.id === c.id) ? plan.changes.map((x) => (x.id === c.id ? c : x)) : [...plan.changes, c], off: plan.off.filter((x) => x !== c.id) });
     setResults(c);
   }
   function removeChange(c: Change) {
-    const before = st.changes;
-    set({ changes: before.filter((x) => x.id !== c.id) });
-    offer('Change removed', async () => set({ changes: before }), 'warn');
+    const { id, changes: before, off: offBefore } = plan;
+    setPlan(id, { changes: before.filter((x) => x.id !== c.id), off: offBefore.filter((x) => x !== c.id) });
+    offer('Change removed', async () => setPlan(id, { changes: before, off: offBefore }), 'warn');
+  }
+  function toggleChange(c: Change) {
+    haptic();
+    setPlan(plan.id, { off: plan.off.includes(c.id) ? plan.off.filter((x) => x !== c.id) : [...plan.off, c.id] });
   }
   function clearAll() {
-    const before = st.changes;
-    set({ changes: [] });
-    offer('Changes cleared', async () => set({ changes: before }), 'warn');
+    const { id, changes: before, off: offBefore } = plan;
+    setPlan(id, { changes: [], off: [] });
+    offer(`${plan.name} cleared`, async () => setPlan(id, { changes: before, off: offBefore }), 'warn');
+  }
+  function addPlan(copy: boolean) {
+    const id = newId();
+    const name = copy ? `${plan.name} copy` : nextPlanName(st.plans);
+    const changes = copy ? plan.changes.map((c) => ({ ...c, id: newId() })) : [];
+    const off = copy ? plan.off.map((o) => changes[plan.changes.findIndex((c) => c.id === o)]?.id).filter((x): x is string => !!x) : [];
+    setSt((s) => ({ ...s, plans: [...s.plans, { id, name, changes, off }], activeId: id }));
+    haptic();
+  }
+  function removePlan() {
+    const before = st;
+    const rest = st.plans.filter((p) => p.id !== plan.id);
+    set({ plans: rest, activeId: rest[0].id });
+    offer(`${plan.name} deleted`, async () => setSt(before), 'warn');
   }
 
-  const two = (a: number[], b: number[]): Series[] => (has ? [{ name: 'With changes', values: a, cls: 's0' }, { name: 'As planned', values: b, cls: 's1' }] : [{ name: 'As planned', values: b, cls: 's0' }]);
+  const two = (a: number[], b: number[]): Series[] => (has ? [{ name: 'With changes', values: a, cls: 's0' }, { name: 'As planned', values: b, cls: 's2 planned' }] : [{ name: 'As planned', values: b, cls: 's0' }]);
   const freeBase = debtFreeMonth(base);
   const freeScen = debtFreeMonth(scen);
   const describeChange = (c: Change) => changeText(c, debts, bills);
@@ -177,20 +237,40 @@ export default function Simulator({ store, today }: { store: Store; today: strin
       <section className="card" aria-labelledby="chg-h">
         <div className="card-head">
           <h2 id="chg-h">What if…</h2>
-          {has && (
+          {listed.length > 0 && (
             <button type="button" className="link-danger" onClick={clearAll}>
               Clear all
             </button>
           )}
         </div>
-        {changes.length === 0 ? (
+        <div className="plan-row">
+          <label className="debt-pick">
+            <span className="sr-only">Plan</span>
+            <select value={plan.id} onChange={(e) => set({ activeId: e.target.value })}>
+              {st.plans.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} · {counted(p).length} {counted(p).length === 1 ? 'change' : 'changes'}
+                </option>
+              ))}
+            </select>
+            <Icon name="down" />
+          </label>
+          <button type="button" className="more plan-more" onClick={() => setPlanSheet(true)} aria-label={`Plans: rename, copy, add or delete ${plan.name}`}>
+            <Icon name="dots" />
+          </button>
+        </div>
+        {listed.length === 0 ? (
           <p className="muted">Try a change to see how it moves your cash, savings and debts. Nothing here changes your budget.</p>
         ) : (
           <ul className="sim-changes">
-            {changes.map((c) => {
+            {listed.map((c) => {
               const t = describeChange(c);
+              const on = !plan.off.includes(c.id);
               return (
-                <li key={c.id}>
+                <li key={c.id} className={on ? '' : 'is-off'}>
+                  <button type="button" role="switch" aria-checked={on} className={`onoff${on ? ' on' : ''}`} onClick={() => toggleChange(c)} aria-label={`Count: ${t.title}`}>
+                    <i aria-hidden="true" />
+                  </button>
                   <button type="button" className="main" onClick={() => setEditing(c)} aria-label={`Edit: ${t.title}`}>
                     <b>{t.title}</b>
                     <span>{t.detail}</span>
@@ -202,6 +282,11 @@ export default function Simulator({ store, today }: { store: Store; today: strin
               );
             })}
           </ul>
+        )}
+        {listed.length > 1 && (
+          <p className="muted small sim-stack">
+            {changes.length === listed.length ? `All ${listed.length} changes count together.` : `${changes.length} of ${listed.length} changes count together.`} Switch one off to leave it out without losing it.
+          </p>
         )}
         <button type="button" className="add-row" onClick={() => setEditing('pick')}>
           <Icon name="add" />
@@ -313,6 +398,8 @@ export default function Simulator({ store, today }: { store: Store; today: strin
         </section>
       )}
 
+      {st.plans.length > 1 && <ComparePlans plans={st.plans.map((p) => ({ plan: p, changes: counted(p) }))} activeId={plan.id} input={input} base={base} onPick={(id) => set({ activeId: id })} />}
+
       <Goal st={st} set={set} scen={scen} start={start} input={input} changes={changes} />
 
       <section className="card span-all" aria-labelledby="tbl-sim-h">
@@ -350,6 +437,22 @@ export default function Simulator({ store, today }: { store: Store; today: strin
       </section>
       </div>
 
+      {planSheet && (
+        <PlanSheet
+          plan={plan}
+          count={st.plans.length}
+          onRename={(name) => setPlan(plan.id, { name })}
+          onAdd={(copy) => {
+            addPlan(copy);
+            setPlanSheet(false);
+          }}
+          onDelete={() => {
+            removePlan();
+            setPlanSheet(false);
+          }}
+          onClose={() => setPlanSheet(false)}
+        />
+      )}
       {results && (
         <ResultSheet
           {...(results === 'all' ? { before: base, after: scen } : changeImpact(input, changes, results))}
@@ -835,6 +938,96 @@ function ChangeSheet({
           </button>
         </div>
       </form>
+    </SheetBackdrop>
+  );
+}
+
+/** Every saved plan side by side: cash at the end, against as planned, saved a month, interest and the debt-free month. */
+function ComparePlans({ plans, activeId, input, base, onPick }: { plans: { plan: Plan; changes: Change[] }[]; activeId: string; input: Parameters<typeof project>[0]; base: Projection; onPick: (id: string) => void }) {
+  const rows = useMemo(
+    () => plans.map(({ plan, changes }) => ({ plan, p: project(input, changes) })),
+    [JSON.stringify(plans), input.data, input.today, input.horizon, input.spendingCents], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const best = Math.max(...rows.map((r) => r.p.endCashCents));
+  const free = (p: Projection) => {
+    const m = debtFreeMonth(p);
+    return m ? monthLabel(m).replace(/ (\d\d)(\d\d)$/, ' ’$2') : p.debts.length ? 'Not yet' : 'No debt';
+  };
+  return (
+    <section className="card" aria-labelledby="cmp-h">
+      <h2 id="cmp-h">Compare plans</h2>
+      <div className="table-wrap" tabIndex={0} role="region" aria-labelledby="cmp-h">
+        <table className="ytable cmp-table">
+          <thead>
+            <tr>
+              <th scope="col">Plan</th>
+              <th scope="col">Cash at end</th>
+              <th scope="col">vs as planned</th>
+              <th scope="col">Saved a month</th>
+              <th scope="col">Interest</th>
+              <th scope="col">Debt-free</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">As planned</th>
+              <td>{formatCents(base.endCashCents)}</td>
+              <td className="muted">—</td>
+              <td>{formatCents(base.avgSavedCents)}</td>
+              <td>{formatCents(base.interestCents)}</td>
+              <td>{free(base)}</td>
+            </tr>
+            {rows.map(({ plan, p }) => (
+              <tr key={plan.id} className={plan.id === activeId ? 'is-active' : ''}>
+                <th scope="row">
+                  <button type="button" className="link" onClick={() => onPick(plan.id)} aria-pressed={plan.id === activeId}>
+                    {plan.name}
+                  </button>
+                  {p.endCashCents === best && rows.length > 1 && <span className="cmp-best">Most cash</span>}
+                </th>
+                <td>{formatCents(p.endCashCents)}</td>
+                <td className={p.endCashCents - base.endCashCents < 0 ? 'fig-neg' : p.endCashCents > base.endCashCents ? 'fig-pos' : ''}>{signed(p.endCashCents - base.endCashCents)}</td>
+                <td>{formatCents(p.avgSavedCents)}</td>
+                <td>{formatCents(p.interestCents)}</td>
+                <td>{free(p)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted small">Each plan counts only its switched-on changes. Tap a plan to open it.</p>
+    </section>
+  );
+}
+
+function PlanSheet({ plan, count, onRename, onAdd, onDelete, onClose }: { plan: Plan; count: number; onRename: (name: string) => void; onAdd: (copy: boolean) => void; onDelete: () => void; onClose: () => void }) {
+  const [name, setName] = useState(plan.name);
+  const save = () => {
+    if (name.trim() && name.trim() !== plan.name) onRename(name.trim());
+  };
+  return (
+    <SheetBackdrop onClose={() => (save(), onClose())}>
+      <div className="sheet menu" role="dialog" aria-modal="true" aria-labelledby="plan-sheet-h">
+        <h2 id="plan-sheet-h">Plans</h2>
+        <label className="field">
+          <span>Name of this plan</span>
+          <input type="text" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} onBlur={save} enterKeyHint="done" />
+        </label>
+        <button type="button" className="secondary" onClick={() => (save(), onAdd(true))}>
+          Copy {plan.name} into a new plan
+        </button>
+        <button type="button" className="secondary" onClick={() => (save(), onAdd(false))}>
+          Start an empty plan
+        </button>
+        {count > 1 && (
+          <button type="button" className="danger" onClick={onDelete}>
+            Delete {plan.name}
+          </button>
+        )}
+        <button type="button" className="primary" onClick={() => (save(), onClose())}>
+          Done
+        </button>
+      </div>
     </SheetBackdrop>
   );
 }
