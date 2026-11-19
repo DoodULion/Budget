@@ -922,3 +922,38 @@ main { padding-top: 14px; }
 .hero:not(.over) .meter i { background: var(--on-gold); }
 .hero:not(.over) .pill { background: color-mix(in srgb, var(--on-gold) 12%, var(--gold)); color: var(--on-gold); }
 .hero:not(.over) .fig-pos { color: var(--on-gold); }
+
+/* ---------- QA pass: labels, names and alignment at every width ---------- */
+/* tab bar labels fit five across on the smallest phones */
+.tabbar button { font-size: clamp(0.68rem, 2.9vw, 0.75rem); padding: 0 2px; }
+/* segmented controls never clip their last choice on a small phone */
+.seg button { font-size: clamp(14px, 3.9vw, 16px); padding: 0 2px; }
+/* date fields show the whole date beside another field */
+input[type="date"] { padding-left: 10px; padding-right: 8px; font-size: 1rem; }
+/* the bills Sort button sits close to the list it sorts */
+.sort-btn { margin-bottom: -8px; }
+/* a note under a sheet's field belongs to that field */
+.sheet :is(.field, .grid2) + .muted.small { margin-top: -8px; }
+/* label and value rows: the label wraps, the value never splits */
+.kv { grid-template-columns: minmax(0, 1fr) auto; }
+.kv dd { white-space: nowrap; }
+/* a card heading's figure ("$700.00 a month") is plain text in its card, aligned with the heading when it wraps */
+.card-head .band-note { background: none; padding: 0; }
+/* debt names wrap instead of being cut off */
+.debt-row .dn { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+/* the ⋮ on the pass uses the pass's ink, so it shows in light and dark */
+.hero:not(.over) .more { color: var(--on-gold); }
+.hero.over .more { color: var(--on-red); }
+/* plain bar lists (Paid with, grouped charts): name, bar and amount on one row */
+.hbars:not(.stack) .hb-track { grid-column: auto; }
+/* donut legend: names wrap rather than being cut off; a smaller donut on small phones */
+.dlegend li span { overflow: visible; overflow-wrap: anywhere; }
+@media (max-width: 399px) { .donut { width: 104px; height: 104px; } .donut-wrap { gap: 12px; } .dlegend li { font-size: 0.85rem; } }
+/* Setup category rows: room for the whole name on a small phone */
+@media (max-width: 399px) { .list-edit .budget-in { width: 80px; } .list-edit li { gap: 8px; } .list-edit .li-main b { font-size: 0.95rem; } }
+.list-edit .li-main b { white-space: normal; overflow: visible; overflow-wrap: break-word; }
+/* Year table: a fade on the right edge says more columns scroll into view */
+.table-wrap { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+/* switches: the off track stays visible on dark cards */
+.switch-row i { background: color-mix(in srgb, var(--ink) 18%, var(--field)); }
+.switch-row.on i { background: var(--fill); }
