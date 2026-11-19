@@ -1,0 +1,86 @@
+/*
+ * Budget Tracker theme tokens. Styling follows Trip Tracker's DESIGN.md (system rounded face,
+ * cards, sheets, meters); the palette is this app's own: cool slate neutrals, navy main, teal accent.
+ * Exact values are settled in step 3 and recorded in DESIGN.md.
+ */
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #eef1f5;
+  --card: #ffffff;
+  --field: #f2f4f8;
+  --ink: #1e2733;
+  --mute: #5a6676;
+  --hairline: #dde3eb;
+  --main: #1f3a5f;
+  --accent: #0f7c86;
+  --over: #c8331b;
+  --under: #17703f;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #141922;
+  --card: #1d2430;
+  --field: #252e3c;
+  --ink: #e9eef5;
+  --mute: #9aa6b6;
+  --hairline: #2e3846;
+  --main: #8fb2e0;
+  --accent: #3cc4cc;
+  --over: #ff7a5c;
+  --under: #5fd39a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+.shell {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: calc(env(safe-area-inset-top) + 16px) calc(env(safe-area-inset-right) + 16px)
+    calc(env(safe-area-inset-bottom) + 24px) calc(env(safe-area-inset-left) + 16px);
+  display: grid;
+  gap: 12px;
+}
+
+.shell-header h1 {
+  margin: 0;
+  font-size: 28px;
+  color: var(--main);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--hairline);
+  border-radius: 20px;
+  padding: 16px;
+}
+
+.card h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+}
+
+.figure {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.mute {
+  margin: 0;
+  color: var(--mute);
+}
