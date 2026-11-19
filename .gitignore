@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.local
+# Personal data never goes in the repo
+*.xlsx
+*backup*.json
+*.csv
+# Impeccable generated files
+**/skills/impeccable/scripts/bin/
+**/skills/impeccable/scripts/config.json
+**/.impeccable/hook.cache.json
+**/.impeccable/hook.pending.json
+.impeccable/live/
+.impeccable/history/
+.impeccable/critique/
+.impeccable/config.local.json
