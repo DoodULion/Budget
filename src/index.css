@@ -652,7 +652,7 @@ html[data-nav] .band-in { animation: none; } /* the whole screen is already slid
 .bill.ended .bill-main b, .bill.ended .bill-amt { color: var(--mute); }
 
 /* tappable figure (income) */
-.kv dd button.link { border: 0; background: none; padding: 0; min-height: 0; color: var(--ink); font: inherit; font-weight: 800; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 4px; }
+.kv dd button.link { border: 0; background: none; padding: 0; min-height: 44px; margin: -11px 0; display: inline-flex; align-items: center; color: var(--ink); font: inherit; font-weight: 800; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 4px; }
 .kv dd small { display: block; font-weight: 600; color: var(--mute); font-size: 0.75rem; }
 .kv .sum-line { border-top: 1.5px solid var(--line); padding-top: 8px; }
 .inline-btn { align-self: flex-start; min-height: 44px; padding: 0 14px; border: 0; border-radius: 14px; background: var(--field); color: var(--ink); font: inherit; font-weight: 800; }
@@ -1000,6 +1000,8 @@ input[type="date"], input[type="month"] { padding-left: 10px; padding-right: 8px
 .sim-changes li.is-off .main b, .sim-changes li.is-off .main span { color: var(--mute); }
 .sim-changes li.is-off .main b { text-decoration: line-through; text-decoration-thickness: 1.5px; }
 .sim-stack { margin: 8px 0 0; }
+.with-ic { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.with-ic .ic { width: 20px; height: 20px; }
 .plan-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 6px; }
 .plan-row .debt-pick { flex: 1; min-width: 0; }
 .plan-more { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none; color: var(--mute); border-radius: 12px; }
@@ -1062,3 +1064,24 @@ input[type="date"], input[type="month"] { padding-left: 10px; padding-right: 8px
 /* Two columns: the pass keeps its own height instead of stretching to its neighbour's. */
 .cols > .hero { align-self: start; }
 .field input[readonly] { background: var(--field); border-color: transparent; }
+
+/* This year's goals (Overview) */
+.goal-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; }
+.goal-list li { border-bottom: 1.5px solid var(--line); }
+.goal-list li:last-child { border-bottom: 0; }
+.goal-row { width: 100%; display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; min-height: 56px; background: none; border: 0; color: var(--ink); font: inherit; text-align: left; }
+button.goal-row { cursor: pointer; }
+.goal-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.goal-main b { font-weight: 800; overflow-wrap: anywhere; }
+.goal-main > span:not(.goal-dots):not(.goal-bar) { font-size: 0.85rem; color: var(--mute); font-weight: 600; }
+.goal-dots { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+.goal-dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+.goal-dots i.met { background: var(--good); }
+.goal-dots i.missed { background: var(--red); }
+.goal-dots i.pending { background: none; box-shadow: inset 0 0 0 2px var(--or); }
+.goal-bar { display: block; height: 8px; margin-top: 6px; border-radius: 999px; background: var(--field); overflow: hidden; }
+.goal-bar i { display: block; height: 100%; border-radius: inherit; background: var(--or); }
+.goal-bar.done i { background: var(--good); }
+.goal-state { flex: none; font-size: 0.8rem; font-weight: 800; padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
+.goal-state.ok { color: var(--good); background: color-mix(in srgb, var(--good) 14%, var(--sign)); }
+.goal-state.behind { color: var(--red); background: color-mix(in srgb, var(--red) 12%, var(--sign)); }

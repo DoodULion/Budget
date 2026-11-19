@@ -8,8 +8,9 @@ import { centsToAmountInput, dayLabel, parseCents } from './money';
 import SheetBackdrop from './SheetBackdrop';
 import type { Store } from './store';
 import { useUndo } from './undo';
+import YearGoals from './YearGoals';
 import { CatTile, Fig, Meter, MoneyInput, signed } from './ui';
-const MONTH_CARDS = ['left', 'saved', 'balance', 'categories', 'bills'] as const;
+const MONTH_CARDS = ['left', 'saved', 'balance', 'categories', 'bills', 'goals'] as const;
 
 /** The month at a glance: budget left, saved against the goal, each category, and the bills checklist. */
 export default function Month({ store, month, today }: { store: Store; month: MonthKey; today: string }) {
@@ -321,6 +322,7 @@ export default function Month({ store, month, today }: { store: Store; month: Mo
         {s.bills.length > 0 && <p className="muted small">An unpaid bill counts toward this month's savings.</p>}
       </section>
     ),
+    goals: <YearGoals store={store} today={today} section={drag('goals', 'card')} />,
   };
 
   return (
