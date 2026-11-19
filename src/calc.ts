@@ -1,3 +1,4 @@
+import type { Goal } from './goals';
 /**
  * All budget math, as pure functions with no UI code. CLAUDE.md is the behavior authority;
  * each rule here matches a formula in the original "Monthly Budget Tracker" spreadsheet.
@@ -29,6 +30,8 @@ export interface Settings {
   setupDone: boolean;
   /** Keep the savings goal at what's left over after bills and budgets, updating it as they change. */
   saveAllLeft?: boolean;
+  /** Goals added on Overview, scored for the year with the savings goal and budget (see goals.ts). */
+  goals?: Goal[];
 }
 
 /** Autopay on the `day` of each month (1–31; short months use their last day), starting in the month `since`. */

@@ -44,7 +44,8 @@ function checkSettings(s: unknown): Settings {
     !Array.isArray(s.paidWith) ||
     !s.paidWith.every(isStr) ||
     typeof s.setupDone !== 'boolean' ||
-    (s.saveAllLeft !== undefined && typeof s.saveAllLeft !== 'boolean')
+    (s.saveAllLeft !== undefined && typeof s.saveAllLeft !== 'boolean') ||
+    (s.goals !== undefined && (!Array.isArray(s.goals) || !s.goals.every((g) => isObj(g) && isStr(g.id) && isStr(g.kind))))
   )
     fail('settings');
   return s as unknown as Settings;

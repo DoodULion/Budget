@@ -100,7 +100,7 @@ function PlanCard({ store, today, step }: { store: Store; today: string; step?: 
         Your plan
       </h2>
       <div className="tripform">
-        <PlanMoney label="Monthly income" value={settings.incomeBaselineCents} onSave={(c) => save({ incomeBaselineCents: c })} hint="What you plan on. A month you don't enter income for uses this." />
+        <PlanMoney key={`i${settings.incomeBaselineCents}`} label="Monthly income" value={settings.incomeBaselineCents} onSave={(c) => save({ incomeBaselineCents: c })} hint="What you plan on. A month you don't enter income for uses this." />
         <div className="grid2">
           <PlanMoney
             key={settings.savingsGoalCents}
@@ -109,7 +109,7 @@ function PlanCard({ store, today, step }: { store: Store; today: string; step?: 
             readOnly={!!settings.saveAllLeft}
             onSave={(c) => save({ savingsGoalCents: c })}
           />
-          <PlanMoney label="Checking balance now" value={settings.startingBalanceCents} onSave={(c) => save({ startingBalanceCents: c })} />
+          <PlanMoney key={`b${settings.startingBalanceCents}`} label="Checking balance now" value={settings.startingBalanceCents} onSave={(c) => save({ startingBalanceCents: c })} />
         </div>
         <button
           type="button"
