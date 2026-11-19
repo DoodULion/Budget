@@ -1040,3 +1040,4 @@ input[type="date"], input[type="month"] { padding-left: 10px; padding-right: 8px
 }
 /* Two columns: the pass keeps its own height instead of stretching to its neighbour's. */
 .cols > .hero { align-self: start; }
+.field input[readonly] { background: var(--field); border-color: transparent; }

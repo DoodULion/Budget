@@ -10,6 +10,7 @@ import {
   freedUpCents,
   leftForSpendingCents,
   leftoverCents,
+  autoSavingsGoal,
   monthLabel,
   monthRange,
   monthSummary,
@@ -151,6 +152,12 @@ describe('planning', () => {
     // Left over after bills and budgets: what "Use what's left" puts in the savings goal.
     expect(leftoverCents(d, '2027-01')).toBe(117_000);
     expect(leftoverCents(d, '2027-02')).toBe(120_000);
+    // "Save all that's left": the goal follows the left-over amount, never below 0.
+    expect(autoSavingsGoal(d, '2027-02-15')).toBeUndefined();
+    const on = { ...d, settings: { ...d.settings, saveAllLeft: true } };
+    expect(autoSavingsGoal(on, '2027-02-15')).toBe(120_000);
+    expect(autoSavingsGoal(on, '2027-01-15')).toBe(117_000);
+    expect(autoSavingsGoal({ ...on, categories: on.categories.map((c) => ({ ...c, budgetCents: 200_000 })) }, '2027-02-15')).toBe(0);
     expect(budgetTooHigh(d, '2027-01')).toBe(false);
     expect(budgetTooHigh(d, '2027-02')).toBe(false);
   });

@@ -27,6 +27,8 @@ export interface Settings {
   paidWith: string[];
   /** False until the first-run setup is finished. */
   setupDone: boolean;
+  /** Keep the savings goal at what's left over after bills and budgets, updating it as they change. */
+  saveAllLeft?: boolean;
 }
 
 /** Autopay on the `day` of each month (1–31; short months use their last day), starting in the month `since`. */
@@ -326,6 +328,12 @@ export function leftForSpendingCents(data: Data, month: MonthKey): Cents {
 /** Income baseline minus bills active that month minus the category budgets: the most the savings goal can be. */
 export function leftoverCents(data: Data, month: MonthKey): Cents {
   return leftForSpendingCents(data, month) + data.settings.savingsGoalCents - spendingBudgetCents(data.categories);
+}
+
+/** The savings goal "Save all that's left" wants right now (never below 0), or undefined when the switch is off. */
+export function autoSavingsGoal(data: Data, today: DateKey): Cents | undefined {
+  if (!data.settings.saveAllLeft) return undefined;
+  return Math.max(0, leftoverCents(data, thisMonth(data.settings, today)));
 }
 
 /** True when the category budgets add up to more than Left for spending that month. */

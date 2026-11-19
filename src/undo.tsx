@@ -1,3 +1,4 @@
+import { haptic, type Feel } from './haptics';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 const SHOW_MS = 7000;
@@ -10,7 +11,7 @@ interface Offer {
 
 interface UndoApi {
   /** Show a message with an Undo button for a few seconds. Only the latest offer is kept. */
-  offer: (label: string, undo: () => Promise<void>) => void;
+  offer: (label: string, undo: () => Promise<void>, feel?: Feel) => void;
 }
 
 const UndoContext = createContext<UndoApi>({ offer: () => {} });
@@ -31,7 +32,8 @@ export function UndoProvider({ children }: { children: ReactNode }) {
     setCurrent(null);
   }, []);
 
-  const offer = useCallback((label: string, undo: () => Promise<void>) => {
+  const offer = useCallback((label: string, undo: () => Promise<void>, feel: Feel = 'tap') => {
+    haptic(feel);
     window.clearTimeout(timer.current);
     counter.current += 1;
     setCurrent({ id: counter.current, label, undo });
@@ -42,6 +44,7 @@ export function UndoProvider({ children }: { children: ReactNode }) {
 
   async function undoNow() {
     if (!current || busy) return;
+    haptic();
     setBusy(true);
     try {
       await current.undo();

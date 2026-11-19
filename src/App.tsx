@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Cards from './Cards';
 import { debtBillChanges, paidOffIds } from './cards';
-import { addMonths, autopayMonths, monthLabel, thisMonth, type MonthKey } from './calc';
+import { addMonths, autopayMonths, autoSavingsGoal, monthLabel, thisMonth, type MonthKey } from './calc';
 import Icon, { type IconName } from './icons';
 import Month from './Month';
 import PeriodSheet, { type Period } from './PeriodSheet';
@@ -26,6 +26,11 @@ const TABS: { id: Tab; label: string; icon: IconName }[] = [
 export default function App() {
   const app = useStore();
   const today = useToday();
+  // "Save all that's left": keep the savings goal in step with income, bills and budgets.
+  const autoGoal = app.ready ? autoSavingsGoal(app.data, today) : undefined;
+  useEffect(() => {
+    if (app.ready && autoGoal !== undefined && autoGoal !== app.data.settings.savingsGoalCents) void app.saveSettings({ savingsGoalCents: autoGoal });
+  }, [autoGoal, app]);
   if (!app.ready) return <p className="screen" style={{ padding: 16 }}>Loading…</p>;
   if (!app.data.settings.setupDone) return <FirstRun store={app} today={today} />;
   return <Main store={app} today={today} />;

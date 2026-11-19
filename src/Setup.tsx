@@ -22,6 +22,7 @@ import { isDebtBill } from './cards';
 import { centsToAmountInput, newId, ordinal, parseCents, todayLocal } from './money';
 import SheetBackdrop from './SheetBackdrop';
 import type { Store } from './store';
+import { haptic, hapticsOn, setHapticsOn } from './haptics';
 import { getThemeChoice, setThemeChoice, type ThemeChoice } from './theme';
 import { useUndo } from './undo';
 import { CatTile, MoneyInput } from './ui';
@@ -59,7 +60,7 @@ function Step({ n }: { n?: number }) {
 
 /* ---------- plan ---------- */
 
-function PlanMoney({ label, value, onSave, hint, fill }: { label: string; value: number; onSave: (cents: number) => Promise<void>; hint?: string; fill?: { label: (amount: string) => string; done: string; cents: number } }) {
+function PlanMoney({ label, value, onSave, hint, readOnly }: { label: string; value: number; onSave: (cents: number) => Promise<void>; hint?: string; readOnly?: boolean }) {
   const [text, setText] = useState(value ? centsToAmountInput(value) : '');
   const parsed = parseCents(text);
   const bad = text.trim() !== '' && parsed === undefined;
@@ -70,6 +71,7 @@ function PlanMoney({ label, value, onSave, hint, fill }: { label: string; value:
         value={text}
         onValue={setText}
         placeholder="0"
+        readOnly={readOnly}
         aria-invalid={bad}
         onBlur={() => {
           const cents = text.trim() === '' ? 0 : parsed;
@@ -77,19 +79,6 @@ function PlanMoney({ label, value, onSave, hint, fill }: { label: string; value:
         }}
       />
       {bad ? <small className="error">Enter an amount like 4,000</small> : hint ? <small className="muted small">{hint}</small> : null}
-      {fill && (
-        <button
-          type="button"
-          className="fill-btn"
-          disabled={fill.cents <= 0 || fill.cents === value}
-          onClick={() => {
-            setText(centsToAmountInput(fill.cents));
-            void onSave(fill.cents);
-          }}
-        >
-          {fill.cents === value ? fill.done : fill.label(formatCents(Math.max(0, fill.cents)))}
-        </button>
-      )}
     </label>
   );
 }
@@ -117,11 +106,28 @@ function PlanCard({ store, today, step }: { store: Store; today: string; step?: 
             key={settings.savingsGoalCents}
             label="Save each month"
             value={settings.savingsGoalCents}
+            readOnly={!!settings.saveAllLeft}
             onSave={(c) => save({ savingsGoalCents: c })}
-            fill={{ label: (a) => `Use the ${a} left`, done: 'Saving all that’s left', cents: leftover }}
           />
           <PlanMoney label="Checking balance now" value={settings.startingBalanceCents} onSave={(c) => save({ startingBalanceCents: c })} />
         </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={!!settings.saveAllLeft}
+          className={`switch-row${settings.saveAllLeft ? ' on' : ''}`}
+          onClick={() => {
+            haptic();
+            const on = !settings.saveAllLeft;
+            void save(on ? { saveAllLeft: true, savingsGoalCents: Math.max(0, leftover) } : { saveAllLeft: undefined });
+          }}
+        >
+          <span>
+            <b>Save all that’s left</b>
+            <small>{settings.saveAllLeft ? 'Updates as your income, bills and budgets change.' : `Income minus bills and budgets: ${formatCents(Math.max(0, leftover))} a month.`}</small>
+          </span>
+          <i aria-hidden="true" />
+        </button>
         <label className="field">
           <span>First month to track</span>
           <input type="month" value={settings.firstMonth} onChange={(e) => e.target.value && void save({ firstMonth: e.target.value })} />
@@ -238,7 +244,7 @@ function BillEditSheet({ store, bill, onClose }: { store: Store; bill?: Bill; on
   async function remove() {
     if (!bill) return;
     await store.removeBill(bill.id);
-    offer(`Removed ${bill.name}`, () => store.putBill({ ...bill, deleted: undefined }));
+    offer(`Removed ${bill.name}`, () => store.putBill({ ...bill, deleted: undefined }), 'warn');
     onClose();
   }
 
@@ -477,7 +483,7 @@ export function CategorySheet({
   async function remove() {
     if (!category) return;
     await store.removeCategory(category.id);
-    offer(`Removed ${category.name}`, () => store.putCategory(category));
+    offer(`Removed ${category.name}`, () => store.putCategory(category), 'warn');
     onClose();
   }
 
@@ -629,7 +635,7 @@ function PaidWithSheet({ store, current, onClose, offer }: { store: Store; curre
 
   async function remove() {
     await store.saveSettings({ paidWith: list.filter((x) => x !== current) });
-    offer(`Removed ${current}`, () => store.saveSettings({ paidWith: list }));
+    offer(`Removed ${current}`, () => store.saveSettings({ paidWith: list }), 'warn');
     onClose();
   }
 
@@ -695,6 +701,7 @@ function PaidWithSheet({ store, current, onClose, offer }: { store: Store; curre
 
 function AppCard({ store, today }: { store: Store; today: string }) {
   const [theme, setTheme] = useState<ThemeChoice>(getThemeChoice);
+  const [buzz, setBuzz] = useState(hapticsOn);
   const [msg, setMsg] = useState<{ text: string; bad?: boolean } | null>(null);
   const [wipe, setWipe] = useState(false);
   const [pending, setPending] = useState<{ data: Data; name: string } | null>(null);
@@ -738,6 +745,28 @@ function AppCard({ store, today }: { store: Store; today: string }) {
             </button>
           ))}
         </div>
+      </div>
+      <div className="field">
+        <span>Haptics</span>
+        <div className="seg theme-pick" role="radiogroup" aria-label="Haptics">
+          {([true, false] as const).map((on) => (
+            <button
+              key={String(on)}
+              type="button"
+              role="radio"
+              aria-checked={buzz === on}
+              className={buzz === on ? 'on' : ''}
+              onClick={() => {
+                setBuzz(on);
+                setHapticsOn(on);
+                haptic();
+              }}
+            >
+              {on ? 'On' : 'Off'}
+            </button>
+          ))}
+        </div>
+        <small className="muted small">A light tap when you save, delete or move something. Needs iOS 18 or later on iPhone.</small>
       </div>
       <div className="part">
         <h3>Backup</h3>

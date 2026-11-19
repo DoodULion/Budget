@@ -78,7 +78,7 @@ Put these in a pure TypeScript module (`src/calc.ts`) with no UI code, and test 
 **Planning figures (Setup)**
 - **Left for spending** (per month) = income baseline − bills active that month − savings goal. Warn when the spending budget is more than this.
 - **Freed up after bills end** = total of bills that have a last month.
-- **Left over** = income baseline − bills active this month − spending budget. A **Use the $x left** button under Save each month sets the savings goal to it (shown as "Saving all that's left" when they match; off when nothing is left).
+- **Left over** = income baseline − bills active this month − spending budget. A **Save all that's left** switch under Save each month (`saveAllLeft` in Settings) keeps the savings goal at it (never below 0), updating it whenever income, bills or budgets change; while it is on, the goal can't be typed.
 
 **Year**
 - **This month** = the current month, or the first tracked month if today is before it.
@@ -128,7 +128,7 @@ Expected:
 - Jan: income $3,000.00; statuses Paid / Paid / Unpaid ("1 unpaid"); bills paid $1,255.20; spent $235.75; by category Food $180.75 (left $219.25), Fun $45.00 (left $55.00), Other $10.00 (left $40.00); budget left $314.25; saved $1,509.05; vs goal +$1,009.05; balance $3,509.05.
 - Feb: income $1,800.00; statuses Paid / Unpaid / Ended ("1 unpaid"); bills paid $1,200.00; spent $470.00; Food $450.00 (left −$50.00, over); budget left $80.00; saved $130.00; vs goal −$370.00; balance $3,639.05.
 - Mar: a future month: saved, vs goal and balance are blank.
-- Left for spending: Jan $1,220.00, Feb $1,250.00. Left over: Jan $1,170.00, Feb $1,200.00. Spending budget $550.00 is under both (no warning). Freed up after bills end $30.00.
+- Left for spending: Jan $1,220.00, Feb $1,250.00. Left over: Jan $1,170.00, Feb $1,200.00; with Save all that's left on, the goal is $1,200.00 in Feb (and $0.00 when budgets are more than what's left). Spending budget $550.00 is under both (no warning). Freed up after bills end $30.00.
 - Cards (made-up Test Visa: APR 24%, start balance $1,000.00 in 2027-01, payments $300.00 on 01-20 and $964.00 on 02-10; purchases $250.00 in Jan, $100.00 in Feb, $40.00 in Mar; today 2027-03-15): Jan interest $14.00 and closing $964.00; Feb paid in full, no interest, closing $100.00; Mar (in progress) closing $140.00 with $2.00 projected interest; payoff at $50.00 a month is 3 payments ending 2027-05 with $2.64 of interest.
 - Linked bill (made-up Old Card: APR 24%, start balance $1,000.00 in 2027-01, no purchases; a $200.00 bill linked to it, paid 01-05 for $200.00 and 02-06 with $250.00 paid, unpaid in Mar; today 2027-03-15): Jan interest $16.00, closing $816.00; Feb interest $11.32, closing $577.32; Mar closing $577.32; payoff at the bill's $200.00 is 3 payments ending 2027-05 with $11.25 of interest. Unmarking a month removes its payment.
 - Closed card (made-up: APR 24%, start balance $1,000.00 in 2027-01, closed since 2027-01, a $300.00 payment on 01-20, nothing else; today 2027-03-15): Jan interest $14.00, closing $714.00; Feb nothing paid, interest $14.28, closing $728.28; Mar (in progress) closing $728.28 with $14.57 projected interest.

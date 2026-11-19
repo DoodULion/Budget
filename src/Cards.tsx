@@ -737,7 +737,7 @@ function CardSheet({
   async function remove() {
     if (!card) return;
     await store.removeCard(card.id);
-    offer(`Removed ${card.name}`, () => store.saveCard(card));
+    offer(`Removed ${card.name}`, () => store.saveCard(card), 'warn');
     onClose();
   }
 
@@ -1077,9 +1077,9 @@ function PaymentSheet({ store, card, payment, today, onClose }: { store: Store; 
   const cents = parseCents(amount);
   const errors = [(cents === undefined || cents === 0) && 'Enter the amount paid', !date && 'Pick the date', date && date.slice(0, 7) < debtStart(card, store.data.settings.firstMonth) && `That is before you started tracking (${monthLabel(debtStart(card, store.data.settings.firstMonth))})`].filter(Boolean) as string[];
 
-  async function put(payments: CardPayment[], text: string, undo: CardPayment[]) {
+  async function put(payments: CardPayment[], text: string, undo: CardPayment[], feel?: 'warn') {
     await store.saveCard({ ...card, payments });
-    offer(text, () => store.saveCard({ ...card, payments: undo }));
+    offer(text, () => store.saveCard({ ...card, payments: undo }), feel);
   }
 
   async function save() {
@@ -1093,7 +1093,7 @@ function PaymentSheet({ store, card, payment, today, onClose }: { store: Store; 
 
   async function remove() {
     if (!payment) return;
-    await put(card.payments.filter((p) => p.id !== payment.id), 'Payment removed', card.payments);
+    await put(card.payments.filter((p) => p.id !== payment.id), 'Payment removed', card.payments, 'warn');
     onClose();
   }
 
