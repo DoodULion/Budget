@@ -32,7 +32,9 @@ export default function PurchaseForm({
   const [newCat, setNewCat] = useState(false);
   const [amount, setAmount] = useState(initial ? centsToAmountInput(initial.amountCents) : '');
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? '');
-  const [date, setDate] = useState(initial?.date ?? today);
+  // Nothing is recorded before the first tracked month: when it hasn't started yet, a new purchase defaults to its first day.
+  const firstDay = `${data.settings.firstMonth}-01`;
+  const [date, setDate] = useState(initial?.date ?? (today < firstDay ? firstDay : today));
   const [description, setDescription] = useState(initial?.description ?? '');
   const [paidWith, setPaidWith] = useState(initial?.paidWith ?? '');
   const [note, setNote] = useState(initial?.note ?? '');
@@ -45,7 +47,7 @@ export default function PurchaseForm({
   let cardLive: number | undefined;
   if (linked && monthOf(date) >= linked.startMonth) {
     const others = initial ? data.purchases.filter((p) => p.id !== initial.id) : data.purchases;
-    cardLive = cardSummary(linked, others, today, linkedBills(linked, data, today)).balanceNowCents + (monthOf(date) <= monthOf(today) ? (cents ?? 0) : 0);
+    cardLive = cardSummary(linked, others, today, linkedBills(linked, data, today), data.settings.firstMonth).balanceNowCents + (monthOf(date) <= monthOf(today) ? (cents ?? 0) : 0);
   }
   const amountBad = cents === undefined || cents === 0;
   const category = data.categories.find((c) => c.id === categoryId);
@@ -53,6 +55,7 @@ export default function PurchaseForm({
   if (amountBad) errors.push(amount.trim() ? 'Enter an amount like 12.50' : 'Enter the amount');
   if (!category) errors.push('Pick a category');
   if (!date) errors.push('Pick a date');
+  else if (date < firstDay && date !== initial?.date) errors.push(`Pick a date in ${monthLabel(data.settings.firstMonth)} or later, your first tracked month`);
 
   // Live: what this category has left in the purchase's month, counting this purchase.
   const month = monthOf(date || today);
@@ -150,7 +153,7 @@ export default function PurchaseForm({
           <div className="grid2">
             <label className="field">
               <span>Date</span>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-invalid={tried && !date} />
+              <input type="date" min={firstDay} value={date} onChange={(e) => setDate(e.target.value)} aria-invalid={tried && !date} />
             </label>
             <label className="field">
               <span>Description</span>

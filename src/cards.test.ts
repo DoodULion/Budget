@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Month, Purchase } from './calc';
 import { autopayMonths, type Data } from './calc';
-import { cardMonths, cardSummary, debtBill, debtBillChanges, groupDebtBills, sortBillItems, interestSaved, isPaidOff, minimumFor, paidOffIds, debtLabel, formatApr, isLoan, linkedBills, parseApr, payoff, payoffForMonth, projection, resetDebt, totalSeries, type CreditCard } from './cards';
+import { cardMonths, cardSummary, debtBill, debtBillChanges, groupDebtBills, sortBillItems, interestSaved, isPaidOff, minimumFor, paidOffIds, debtLabel, formatApr, isLoan, linkedBills, parseApr, payoff, payoffForMonth, projection, resetDebt, debtStart, totalSeries, groupDebts, debtItemKey, debtOrderFromItems, debtOrderWithin, type CreditCard } from './cards';
 
 // Made-up figures only.
 const card: CreditCard = {
@@ -443,5 +443,54 @@ describe('resetting a closed card with a due date', () => {
     const reset = resetDebt(closed, 80_000, '2027-03-20');
     const s = cardSummary(reset, [], '2027-04-20', linkedBills(reset, { bills: [bill], months: autopayMonths(data(reset), '2027-04-20') }, '2027-04-20'));
     expect(s.rows.map((r) => [r.month, r.paymentsCents])).toEqual([['2027-03', 0], ['2027-04', 5_000]]);
+  });
+});
+
+describe('combining debts of the same type on the Debt tab', () => {
+  // Made-up: two credit cards, an auto loan and a third credit card, in that order.
+  const mk = (id: string, kind: CreditCard['kind'], start: number, min?: number, extra: Partial<CreditCard> = {}): CreditCard => ({ id, kind, name: id, aprBps: 2400, startBalanceCents: start, startMonth: '2027-03', minPaymentCents: min, payments: [], ...extra });
+  const debts = [mk('A Visa', undefined, 50_000, 2_500), mk('B Card', 'credit-card', 20_000, 1_000), mk('Car', 'auto-loan', 1_000_000, 30_000), mk('C Card', undefined, 0, 4_000, { paidOffDate: '2027-03-01' })];
+  const items = groupDebts(debts.map((c) => cardSummary(c, [], today)));
+  it('makes one group per type with two or more debts, where its first debt was', () => {
+    expect(items.map(debtItemKey)).toEqual(['group:credit-card', 'Car']);
+    const g = items[0];
+    expect(g).toMatchObject({ kind: 'group', label: 'Credit cards', balanceCents: 70_000, minimumsCents: 3_500 }); // the paid-off card's minimum is left out
+    if (g.kind === 'group') expect(g.debts.map((s) => s.card.id)).toEqual(['A Visa', 'B Card', 'C Card']);
+  });
+  it('keeps a lone debt of its type as a plain row', () => {
+    expect(groupDebts(debts.slice(1, 3).map((c) => cardSummary(c, [], today))).map((it) => it.kind)).toEqual(['debt', 'debt']);
+  });
+  it('moves a group’s debts together, and reorders inside a group in its own slots', () => {
+    expect(debtOrderFromItems(['Car', 'group:credit-card'], items)).toEqual(['Car', 'A Visa', 'B Card', 'C Card']);
+    expect(debtOrderWithin(['A Visa', 'Car', 'B Card', 'C Card'], ['C Card', 'A Visa', 'B Card'])).toEqual(['C Card', 'Car', 'A Visa', 'B Card']);
+  });
+});
+
+describe('nothing before the first tracked month', () => {
+  // Made-up: the Test Visa starts 2027-01, but tracking starts 2027-02.
+  it('starts a debt that began earlier at its starting balance in the first month', () => {
+    expect(debtStart(card, '2027-02')).toBe('2027-02');
+    expect(debtStart(card, '2026-12')).toBe('2027-01');
+    const rows = cardMonths(card, purchases, today, [], '2027-02');
+    expect(rows.map((r) => r.month)).toEqual(['2027-02', '2027-03']);
+    expect(rows[0]).toMatchObject({ openingCents: 100_000, chargesCents: 10_000, paymentsCents: 96_400, interestCents: 72 }); // Jan's charges and payment are not counted
+    expect(cardSummary(card, purchases, today, undefined, '2027-02').startMonth).toBe('2027-02');
+  });
+  it('records nothing while the first month is still ahead', () => {
+    expect(cardMonths(card, purchases, '2027-01-20', [], '2027-02')).toEqual([]);
+    expect(cardSummary(card, purchases, '2027-01-20', undefined, '2027-02').balanceNowCents).toBe(100_000);
+  });
+  it('resets a debt to start in the first month when it is still ahead', () => {
+    expect(resetDebt(card, 40_000, '2027-01-20', '2027-02')).toMatchObject({ startMonth: '2027-02', startBalanceCents: 40_000 });
+  });
+});
+
+describe('due-date autopay before the first tracked month', () => {
+  it('records nothing until the first month, then only from it', () => {
+    const loan: CreditCard = { id: 'car', kind: 'auto-loan', name: 'Car loan', aprBps: 600, startBalanceCents: 1_000_000, startMonth: '2027-01', minPaymentCents: 30_000, dueDay: 15, payments: [] };
+    const bill = debtBill(loan, undefined, '2027-01-02')!; // autopay since 2027-01
+    const d: Data = { settings: { firstMonth: '2027-03' } as Data['settings'], bills: [bill], cards: [loan], categories: [], months: [], purchases: [] };
+    expect(autopayMonths(d, '2027-02-20')).toEqual([]);
+    expect(autopayMonths(d, '2027-03-15').map((m) => m.month)).toEqual(['2027-03']);
   });
 });

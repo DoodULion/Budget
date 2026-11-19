@@ -236,8 +236,8 @@ export interface DebtMonth {
 /** All debts together: what is owed at each month's end, the interest added and the payments made. */
 export function debtByMonth(data: Data, today: DateKey): DebtMonth[] {
   if (data.cards.length === 0) return [];
-  const summaries = data.cards.map((c) => cardSummary(c, data.purchases, today, linkedBills(c, data, today)));
-  const first = summaries.map((s) => s.card.startMonth).sort()[0];
+  const summaries = data.cards.map((c) => cardSummary(c, data.purchases, today, linkedBills(c, data, today), data.settings.firstMonth));
+  const first = summaries.map((s) => s.startMonth).sort()[0];
   return monthRange(first, monthOf(today)).map((month) => {
     const rows = summaries.map((s) => s.rows.find((r) => r.month === month));
     return {

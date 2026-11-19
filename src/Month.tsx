@@ -1,5 +1,5 @@
 import { Fragment, useState, type JSX } from 'react';
-import { useCardOrder } from './useCardOrder';
+import { mergeOrder, useCardOrder } from './useCardOrder';
 import { useHoldDrag } from './useHoldDrag';
 import { BILL_SORTS, groupDebtBills, sortBillItems, payoffForMonth, PAYOFF_NAME, type BillSort } from './cards';
 import { autopayDate, balances, formatCents, monthLabel, monthSummary, roundDiv, type BillRow, type MonthKey } from './calc';
@@ -68,7 +68,11 @@ export default function Month({ store, month, today }: { store: Store; month: Mo
 
   // Hold a card and drag it to rearrange the screen; the order is kept on this device.
   const [cardOrder, setCardOrder] = useCardOrder('month', MONTH_CARDS);
-  const { order, dragId, listRef, bind, justDragged } = useHoldDrag(cardOrder, setCardOrder, ':scope > [data-id]');
+  // A press on a category row belongs to the row: the categories rearrange among themselves the same way.
+  const { order, dragId, listRef, bind, justDragged } = useHoldDrag(cardOrder, setCardOrder, ':scope > [data-id]', '.more, .cat-row');
+  const catIds = s.byCategory.map((r) => r.category.id);
+  const [catOrder, setCatOrder] = useCardOrder('month-categories', catIds);
+  const cats = useHoldDrag(mergeOrder(catOrder, catIds), setCatOrder, ':scope > [data-id]');
   const drag = (id: string, cls: string) => ({ ...bind(id), className: `${cls} sum-card${dragId === id ? ' lifted' : ''}` });
 
   const renderBill = (r: BillRow, nested = false) => (
@@ -212,11 +216,22 @@ export default function Month({ store, month, today }: { store: Store; month: Mo
         {s.byCategory.length === 0 && payoff.byCard.length === 0 ? (
           <p className="empty-line">Add categories under Setup.</p>
         ) : (
-          <ul className="cat-rows">
-            {s.byCategory.map((r) => {
+          <ul
+            className={`cat-rows${cats.dragId ? ' dragging' : ''}`}
+            ref={(el) => {
+              cats.listRef.current = el;
+            }}
+            onClickCapture={(e) => {
+              if (cats.justDragged()) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+            }}
+          >
+            {cats.order.map((id) => s.byCategory.find((r) => r.category.id === id)).filter((r): r is (typeof s.byCategory)[number] => !!r).map((r) => {
               const catOver = r.leftCents < 0;
               return (
-                <li key={r.category.id} className="cat-row">
+                <li key={r.category.id} {...cats.bind(r.category.id)} className={`cat-row sum-card${cats.dragId === r.category.id ? ' lifted' : ''}`}>
                   <CatTile category={r.category} />
                   <div className="cat-name">
                     <b>{r.category.name}</b>
@@ -401,6 +416,9 @@ function BillSheet({ store, month, row, today, onClose }: { store: Store; month:
   const [amount, setAmount] = useState(row.payment?.amountPaidCents === undefined ? '' : centsToAmountInput(row.payment.amountPaidCents));
   const parsed = parseCents(amount);
   const bad = amount.trim() !== '' && parsed === undefined;
+  // Nothing is recorded before the first tracked month.
+  const firstDay = `${store.data.settings.firstMonth}-01`;
+  const early = !!date && date < firstDay && date !== row.payment?.datePaid;
   const { offer } = useUndo();
 
   async function save() {
@@ -426,7 +444,7 @@ function BillSheet({ store, month, row, today, onClose }: { store: Store; month:
         aria-labelledby="bill-h"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!bad) void save();
+          if (!bad && !early) void save();
         }}
       >
         <h2 id="bill-h">
@@ -435,7 +453,7 @@ function BillSheet({ store, month, row, today, onClose }: { store: Store; month:
         <div className="grid2">
           <label className="field">
             <span>Date paid</span>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <input type="date" min={firstDay} value={date} onChange={(e) => setDate(e.target.value)} />
           </label>
           <label className="field">
             <span>Amount paid</span>
@@ -444,8 +462,9 @@ function BillSheet({ store, month, row, today, onClose }: { store: Store; month:
         </div>
         <p className="muted small">Leave Amount paid blank when you paid the usual {formatCents(row.bill.amountCents)}.</p>
         {bad && <p className="error">Enter an amount like 55.20</p>}
+        {early && <p className="error">Pick a date in {monthLabel(store.data.settings.firstMonth)} or later, your first tracked month</p>}
         <div className="sheet-actions">
-          <button type="submit" className="primary" disabled={bad}>
+          <button type="submit" className="primary" disabled={bad || early}>
             {row.status === 'paid' ? 'Save changes' : 'Mark paid'}
           </button>
           {row.status === 'paid' && (

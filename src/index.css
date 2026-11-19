@@ -882,3 +882,16 @@ html[data-nav] .band-in { animation: none; } /* the whole screen is already slid
 .reset-item > span { display: flex; flex-direction: column; gap: 1px; color: var(--ink); }
 .reset-item > span small { font-weight: 600; font-size: 0.8rem; }
 .reset-item .error { margin: 0; font-size: 0.85rem; }
+
+/* Debt list: debts of one type combined into a group that opens to them */
+.debt-group { border-bottom: 1.5px solid var(--line); }
+.debt-group:last-child { border-bottom: 0; }
+.debt-group .group-head { min-height: 64px; gap: 10px; }
+.debt-group .bill-amt { font-weight: 800; white-space: nowrap; }
+.group-count { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; background: var(--field); color: var(--ink); font-weight: 800; font-size: 1.05rem; border: 1.5px solid var(--line); }
+.debt-list.nested { margin: 0 0 8px 14px; padding-left: 12px; border-left: 2px solid var(--line); }
+.debt-list.nested .debt-row:last-child { border-bottom: 0; }
+.debt-group.sum-card.lifted { background: var(--sign); border-radius: 14px; padding: 0 8px; }
+.debt-list.dragging .debt-group:not(.lifted) { opacity: 0.85; }
+.cat-row.sum-card.lifted { background: var(--sign); border-radius: 14px; padding: 6px 8px; margin: -6px -8px; }
+.cat-rows.dragging .cat-row:not(.lifted) { opacity: 0.85; }
